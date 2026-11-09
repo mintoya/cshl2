@@ -1,0 +1,7 @@
+@using @import @path "bind.cshl";
+mkfn <~ @fn[[params as @ast(), ret as @ast()], @inlineast(),
+  '@fn[[body as @ast()], @any(), 
+    @fn[`(params), `(ret), \`(body)]]];
+`'@struct{
+  `@id("->") <~ mkfn;
+}

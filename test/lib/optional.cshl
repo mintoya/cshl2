@@ -1,0 +1,27 @@
+@using @import @path "bind.cshl";
+@using @import @path "fn.cshl";
+@using @import @path "if.cshl";
+
+type <~ @type() as @type();
+bool <~ @bool() as type;
+ast  <~ @ast()  as type;
+inline  <~ @inlineast() as type;
+? <~ ((
+  T as type,
+) -> type @struct{
+  present <- @zero(bool);
+  value   <- @zero(T);
+  orelse  <~ ((self as ast, otherwise as ast) -> inline {
+    temp <~ @gensym(temp);
+    '{
+      `temp <~ `self;
+      `@outlineast(if (`temp).present 
+        ((`temp).value, `otherwise))
+    }
+  });
+});
+
+// @zero(?i32):orelse(5 as i32) == (5 as i32);
+@struct{
+  ? <~ ?;
+}

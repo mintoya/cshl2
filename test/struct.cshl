@@ -1,0 +1,22 @@
+@using @import @path "lib/bind.cshl";
+
+i32 <~ @sint();
+type<~ @type();
+
+si32 <~ @struct{
+  Self  <~ @this() as type;
+  RSelf <~ @refT@this() as type;
+  zi32  <~ @fn[[],i32,0 as i32];
+
+  self  <- (0 as i32);
+  add   <~ ([self as RSelf, a as i32] -> i32
+    self.self = self.self + a]);
+  init  <~ @zero(Self);
+};
+x <- si32.init;
+
+(x:add(5) == 5)
+  and (x:add(5)      == 10)
+  and (x.add(x,5)    == 15)
+  and (x.zi32()      == (0 as i32))
+  and (@sizeof(zi32) == @sizeof(i32))

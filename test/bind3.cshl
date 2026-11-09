@@ -1,0 +1,14 @@
+@using @import @path "lib/bind.cshl";
+// typed declarations
+
+type <~ @type();
+i32  <~ @sint() as type;
+
+x <~ 5 as i32;
+y <~ 6 as i32;
+z <- 0 as i32;
+z = (x + y);
+
+(z == 11)
+// weather it's a referance is not in the type
+  and (@typeof(z) == i32)

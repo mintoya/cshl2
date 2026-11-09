@@ -1,0 +1,12 @@
+`'@bind[`@id("<~"),@fn[[name as @ast(), value as @ast()],@inlineast(),{
+  '(@bind[\`name,\`value])
+}]];
+`'@bind[`@id("<-"),@fn[[name as @ast(), value as @ast()],@inlineast(),{
+  typ <~ '(@typeof \`value);
+  '((\`name <~ @at@alloca[\`typ]) = \`value)
+}]];
+
+`'@struct{
+  `@id("<~") <~ `@id("<~");
+  `@id("<-") <~ `@id("<-");
+}
