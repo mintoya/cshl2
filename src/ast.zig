@@ -33,17 +33,6 @@ pub const SrcRef = struct {
         return self.src.bytes()[self.off .. self.len + self.off];
     }
 };
-test "srcref gets" {
-    var bytes = "hello world".*;
-    var buffer: FileItem = .{ .memory = .initBuffer(&bytes) };
-    buffer.memory.items.len = bytes.len;
-    const bifref: SrcRef = .{ .src = &buffer, .len = 4, .off = 1 };
-    try std.testing.expect(std.mem.eql(
-        u8,
-        "ello",
-        bifref.gets(),
-    ));
-}
 pub const Ast = union(enum(u8)) {
     nil: SrcRef,
     str: SrcRef,
@@ -51,7 +40,6 @@ pub const Ast = union(enum(u8)) {
     id: SrcRef,
     call: []const Ast,
 
-    /// Prints the tree as an s-expression: `(f a b)`, strings in quotes.
     pub fn format(self: Ast, w: *std.Io.Writer) std.Io.Writer.Error!void {
         switch (self) {
             .nil => try w.writeAll("nul"),
@@ -68,3 +56,14 @@ pub const Ast = union(enum(u8)) {
         }
     }
 };
+test "srcref gets" {
+    var bytes = "hello world".*;
+    var buffer: FileItem = .{ .memory = .initBuffer(&bytes) };
+    buffer.memory.items.len = bytes.len;
+    const bifref: SrcRef = .{ .src = &buffer, .len = 4, .off = 1 };
+    try std.testing.expect(std.mem.eql(
+        u8,
+        "ello",
+        bifref.gets(),
+    ));
+}
