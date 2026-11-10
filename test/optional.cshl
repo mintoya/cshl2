@@ -1,0 +1,7 @@
+@using @import @path "lib/optional.cshl";
+@using @import @path "lib/bind.cshl";
+type <~ @type();
+i32 <~ @sint() as type;
+
+x <~ (?i32).null;
+(x.present == (0==1)) and (x:orelse(67 as i32) == (67 as i32))

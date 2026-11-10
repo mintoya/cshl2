@@ -1,0 +1,74 @@
+// traits: compile-time registries of impls, kept outside the types they're for.
+//   Show <~ trait("Show");
+//   Show.impl(i32, @struct{ ... });   an impl is a struct of functions
+//   Show.of(i32)                      that struct, or a compile error
+//   Show.has(i32)                     whether i32 has an impl
+// Both run at compile time: they return types.
+// trait_checked(name, check) runs check(impl) on every impl as it's
+// registered, so an impl of the wrong shape fails there, not where it's used.
+@using @import @path "bind.cshl";
+@using @import @path "fn.cshl";
+
+type <~ @type();
+any  <~ @any();
+
+// one impl in a trait's list
+Entry <~ @struct{
+  T    <- @void();
+  impl <- @void();
+  next <- @zero(@ptr(@this()));
+};
+none <~ @zero(@ptr(Entry));
+
+accept <~ [I as type] -> type I;
+
+// a new trait; the name only tells traits apart
+trait_checked <~ [name as any, check as any] -> type @struct{
+  head <~ @alloc[@ptr(Entry)];
+
+  impl <~ [T as type, I as type] -> type {
+    p <- @at(head);
+    @loop @if[p != none, {
+      @if[@at(p).T == T, @compileError("this type already has an impl of this trait")];
+      p = @at(p).next;
+      @repeat()
+    }];
+    checked <~ check(I);
+    e <~ @alloc[Entry];
+    @at(e).T = T;
+    @at(e).impl = I;
+    @at(e).next = @at(head);
+    @at(head) = e;
+    I
+  };
+
+  has <~ [T as type] -> @bool() {
+    found <- 1 != 1;
+    p <- @at(head);
+    @loop @if[p != none, {
+      @if[@at(p).T == T, found = 1 == 1];
+      p = @at(p).next;
+      @repeat()
+    }];
+    found
+  };
+
+  of <~ [T as type] -> type {
+    found <- @void();
+    p <- @at(head);
+    @loop @if[p != none, {
+      @if[@at(p).T == T, found = @at(p).impl];
+      p = @at(p).next;
+      @repeat()
+    }];
+    @if[found == @void(), @compileError("this type has no impl of this trait")];
+    found
+  };
+};
+
+trait <~ [name as any] -> type trait_checked(name, accept);
+
+@struct{
+  trait <~ trait;
+  trait_checked <~ trait_checked;
+}

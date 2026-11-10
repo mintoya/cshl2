@@ -1,0 +1,4 @@
+// unquotes written inside an unquoted expression belong to the enclosing quote
+@bind[twice, @fn[[x as @ast()], @inlineast(), '(`x + `x)]];
+@bind[n, 4];
+(` '(1 + `@outlineast(twice(`n)))) == 9

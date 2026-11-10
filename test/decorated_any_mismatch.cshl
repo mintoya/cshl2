@@ -1,0 +1,3 @@
+// error: doesn't match
+@bind[deref, @fn[[p as @ptr(@any())], @any(), @at(p)]];
+deref(5)

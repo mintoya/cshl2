@@ -6,10 +6,11 @@ type <~ @type() as @type();
 bool <~ @bool() as type;
 ast  <~ @ast()  as type;
 inline  <~ @inlineast() as type;
+null <~ @void()();
 ? <~ ((
   T as type,
 ) -> type @struct{
-  present <- @zero(bool);
+  present <- (1 != 1);
   value   <- @zero(T);
   orelse  <~ ((self as ast, otherwise as ast) -> inline {
     temp <~ @gensym(temp);
@@ -19,9 +20,11 @@ inline  <~ @inlineast() as type;
         ((`temp).value, `otherwise))
     }
   });
+  null <~ @this()();
 });
 
 // @zero(?i32):orelse(5 as i32) == (5 as i32);
 @struct{
   ? <~ ?;
+  null <~ null;
 }

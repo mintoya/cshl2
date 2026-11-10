@@ -1,0 +1,12 @@
+// a module re-exporting its imports: combine merges their namespaces
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/combine.cshl";
+both <~ combine(
+  @import @path "lib/optional.cshl",
+  @import @path "lib/fn.cshl"
+);
+@using both;
+i32 <~ @sint();
+inc <~ [x as i32] -> i32 x + 1;
+o <- ?(i32)();
+(inc(1 as i32) == 2) and (o.present == (1 != 1))

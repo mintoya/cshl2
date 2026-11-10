@@ -1,0 +1,3 @@
+// @this() can be called in its own block, with the fields declared so far
+@bind[S, @struct{ @bind[a, @at@alloca[@sint()]]; a = 3; @bind[made, @this()()] }];
+S.made.a == 3

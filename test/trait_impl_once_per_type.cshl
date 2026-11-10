@@ -1,0 +1,6 @@
+// error: this type already has an impl of this trait
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/trait.cshl";
+Width <~ trait("Width");
+Width.impl(@sint(), @struct{});
+Width.impl(@sint(), @struct{ x <~ 1; });

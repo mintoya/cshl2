@@ -1,0 +1,4 @@
+// @apply[f, x] is x's list with f applied to each item, keeping its head
+@bind[double, @fn[[x as @ast()], @ast(), '(`x * 2)]];
+@bind[xs, '([1, 2, 3])];
+(@apply[double, xs] == '([1 * 2, 2 * 2, 3 * 2])) and (@get[@apply[double, xs], 2] == '(2 * 2))

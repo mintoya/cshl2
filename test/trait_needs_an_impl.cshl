@@ -1,0 +1,5 @@
+// error: this type has no impl of this trait
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/trait.cshl";
+Width <~ trait("Width");
+Width.of(@sint())

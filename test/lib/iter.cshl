@@ -1,0 +1,59 @@
+// iteration as a trait. A type is iterable when it has an Iterator impl:
+//   Item   the element type
+//   State  where an iteration is up to
+//   start  [c as C] -> State
+//   next   [s as @refT(State)] -> ?(Item): the next element, or none
+// and next's return type is checked when the impl is registered.
+//   for(c) |> each { ..._.. }   runs the block for each element, as _
+@using @import @path "bind.cshl";
+@using @import @path "fn.cshl";
+@using @import @path "trait.cshl";
+@using @import @path "optional.cshl";
+
+type <~ @type();
+any  <~ @any();
+
+Iterator <~ trait_checked("Iterator", [I as type] -> type {
+  @if[@fieldtype(@typeof(I.next), 1) != ?(I.Item),
+    @compileError("an iterator's next must return ?(Item)")];
+  I
+});
+
+// an iteration in progress: the impl, and its state
+Running <~ [I as type] -> type @struct{
+  impl  <~ I;
+  state <- @zero(I.State);
+};
+
+// the iteration of c, by its type's Iterator impl
+for <~ [c as any] -> any {
+  I <~ Iterator.of(@typeof(c));
+  r <- Running(I)();
+  r.state = I.start(c);
+  r
+};
+
+// each {body}: a function that runs body for each element of an
+// iteration, with the element bound to _
+each <~ [body as @ast()] -> any @fn[[it as @ast()], @inlineast(), {
+  s <~ @gensym(s);
+  v <~ @gensym(v);
+  '{
+    @bind[`s, @at@alloca[@typeof(`it)]];
+    `s = `it;
+    @loop {
+      @bind[`v, @typeof(`s).impl.next((`s).state)];
+      @if[(`v).present, {
+        @bind[_, (`v).value];
+        `body;
+        @repeat()
+      }];
+    };
+  }
+}];
+
+@struct{
+  Iterator <~ Iterator;
+  for <~ for;
+  each <~ each;
+}

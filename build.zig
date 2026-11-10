@@ -57,4 +57,11 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+
+    // the language tests: every test/*.cshl must give true
+    const run_cshl = b.addRunArtifact(exe);
+    run_cshl.addArgs(&.{ "--test", "test", "--zig", b.graph.zig_exe });
+    run_cshl.setCwd(b.path("."));
+    run_cshl.has_side_effects = true;
+    test_step.dependOn(&run_cshl.step);
 }

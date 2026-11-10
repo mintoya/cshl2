@@ -1,0 +1,6 @@
+// only a bare @ast() parameter takes the syntax; a decorated one takes an
+// ast value, so an ast in a variable can be passed directly
+@bind[twice, @fn[[x as @const(@ast())], @inlineast(), '(`x + `x)]];
+@bind[name, @fn[[x as @ast()], @ast(), x]];
+@bind[e, '(3 + 4)];
+(twice(e) == 14) and (name(e) == '(e)) and (@compiles(twice(5)) == (1 != 1))

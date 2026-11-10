@@ -1,0 +1,7 @@
+// @opaqueType("name") is the C type by that name: it has no layout here, but
+// a pointer to it does; the same name is the same type
+@bind[FILE, @opaqueType("FILE")];
+(@sizeof(@ptr(FILE)) == @sizeof(@ptr(@sint())))
+  and (@compiles(@sizeof(FILE)) == (1 != 1))
+  and (FILE == @opaqueType("FILE"))
+  and (FILE != @opaqueType("DIR"))

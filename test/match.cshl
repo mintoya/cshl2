@@ -1,0 +1,24 @@
+// match picks the first arm whose value equals the item, or the else arm
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/match.cshl";
+true  <~ 1 == 1;
+false <~ 0 == 1;
+
+unfolded <~ @outlineast(match(6 [
+  else |> true,
+  1 |> true,
+  6 |> false,
+]));
+
+@log unfolded;
+((match 6 [
+  else |> true,
+  6    |> false,
+]) == false) and (match 1 [
+  else |> false,
+  1    |> true,
+]) and (match 2 [
+  else |> true,
+  1    |> false,
+  6    |> false,
+]) and (@ast_stringeq(@get[unfolded, 0], "{}"))

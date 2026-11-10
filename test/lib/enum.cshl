@@ -1,0 +1,22 @@
+//  example o fhow to make the c style signed integer incrementing enum
+@struct{
+  @bind[counting,@at@alloca[@sint()]];
+  counting = 0 as @sint();
+
+  @bind[postinc,@fn([counter as @ast()],@inlineast(),{
+    @bind[tmp, @gensym(tmp)];
+    '{
+      @bind[`tmp,`counter as @sint()];
+      `counter = `counter + 1;
+      `tmp
+    }
+  })];
+
+  @bind[enummember1, postinc[counting]];
+  @bind[enummember2, postinc[counting]];
+  @bind[enummember3, postinc[counting]];
+  @bind[enummember4, postinc[counting]];
+
+  @unbind[counting];
+  @unbind[postinc];
+};

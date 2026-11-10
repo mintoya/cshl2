@@ -1,0 +1,62 @@
+// slices: a pointer to a zero-length array and a length. s:get(i) is
+// element i, a place. Every slice type is iterable.
+@using @import @path "bind.cshl";
+@using @import @path "fn.cshl";
+@using @import @path "optional.cshl";
+@using @import @path "iter.cshl";
+
+type <~ @type();
+any  <~ @any();
+u64  <~ @ulonglong();
+true <~ 1 == 1;
+
+slice <~ [T as type] -> type {
+  S <~ @struct{
+    Self <~ @this();
+    ptr <- @zero(@ptr(@arr[0, T]));
+    len <- 0 as u64;
+    get <~ [self as Self, i as u64] -> @refT(T) @get[@at(self.ptr), i];
+    // elements start to end, not including end
+    sub <~ [self as Self, start as u64, end as u64] -> Self {
+      r <- Self();
+      r.ptr = (@where self:get(start)) as @ptr(@arr[0, T]);
+      r.len = end - start;
+      r
+    };
+  };
+  Iterator.impl(S, @struct{
+    Item  <~ T;
+    State <~ @struct{
+      of <- S();
+      at <- 0 as u64;
+    };
+    start <~ [s as S] -> State {
+      r <- State();
+      r.of = s;
+      r
+    };
+    next <~ [st as @refT(State)] -> ?(T) {
+      r <- ?(T)();
+      @if[st.at < st.of.len, {
+        r.present = true;
+        r.value = st.of:get(st.at);
+        st.at = st.at + (1 as u64);
+      }];
+      r
+    };
+  });
+  S
+};
+
+// the whole of the array a; from a itself, since a copy would be gone
+slice_of <~ [a as @refT(@any())] -> any {
+  r <- slice(@membertype(@typeof(a)))();
+  r.ptr = (@where a) as @typeof(r.ptr);
+  r.len = @len(a) as u64;
+  r
+};
+
+@struct{
+  slice <~ slice;
+  slice_of <~ slice_of;
+}

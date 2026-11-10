@@ -1,0 +1,4 @@
+// error: `false` is already bound in this scope
+@using @import @path "lib/bind.cshl";
+false <~ (0 == 1) as @comptime(@bool());
+false <~ (1 == 1) as @comptime(@bool());

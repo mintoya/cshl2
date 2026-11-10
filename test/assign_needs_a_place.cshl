@@ -1,0 +1,4 @@
+// error: can only assign to a place
+// a value from @bind isn't a place; storage from @alloca is
+@bind[x, 5];
+x = 6

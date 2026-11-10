@@ -1,0 +1,39 @@
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/if.cshl";
+@using @import @path "lib/iter.cshl";
+@using @import @path "lib/optional.cshl";
+i32 <~ @sint();
+Counter <~ @struct{
+  n   <- 0 as i32;
+  end <- 0 as i32;
+  init  <~ [start as i32, end as i32] -> @this() {
+    result <- @this()();
+    result.n = start;
+    result.end = end;
+    result
+  };
+};
+Iterator.impl(Counter, @struct{
+  Item  <~ i32;
+  State <~ Counter;
+  start <~ [c as Counter] -> Counter c;
+  next  <~ [s as @refT(Counter)] -> ?i32 {
+    rt <~ @returntype();
+    s.n = s.n + 1;
+    if s.n > s.end 
+      (rt.null, {
+        val <- rt();
+        val.value = (s.n - 1);
+        val.present = (1==1);
+        val
+      })
+  };
+});
+
+res <- 0 as i32;
+for(Counter.init(0 as i32,5 as i32)) 
+|> each {
+  res = res + _
+};
+res == (( 0 + 1 + 2 + 3 + 4 ) as i32)

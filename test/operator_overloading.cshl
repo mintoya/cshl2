@@ -1,0 +1,38 @@
+// operators dispatch on the left operand's type through a trait per operator;
+// the impl decides what the right operand can be
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/ops.cshl";
+i32 <~ @sint();
+type <~ @type();
+
+V2 <~ @struct{
+  x <- 0 as i32;
+  y <- 0 as i32;
+};
+v2 <~ [x as i32, y as i32] -> V2 { v <- V2(); v.x = x; v.y = y; v };
+
+Add.impl(V2, @struct{
+  add <~ [a as V2, b as V2] -> V2 v2(a.x + b.x, a.y + b.y);
+});
+// scaling: the right operand is an i32
+Mul.impl(V2, @struct{
+  mul <~ [a as V2, k as i32] -> V2 v2(a.x * k, a.y * k);
+});
+// a V2 as an integer: the sum of its parts
+As.impl(V2, @struct{
+  to <~ [a as V2, T as type] -> i32 (a.x + a.y) as T;
+});
+Eq.impl(V2, @struct{
+  eq <~ [a as V2, b as V2] -> @bool() (a.x == b.x) and (a.y == b.y);
+});
+
+n <- 3 as i32;   // runtime, so the builtins still lower
+s <- (v2(1 as i32, 2 as i32) + v2(10 as i32, 20 as i32)) * n;
+
+(s == v2(33 as i32, 66 as i32))
+  and ((s.x + n) == (36 as i32))
+  and ((n * 2 as i32) == (6 as i32))
+  and ((5 shl 1) == 10)
+  and ((s as i32) == (99 as i32))
+  and (((n as @refT(@any())) = 4 as i32) == n)

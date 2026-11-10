@@ -1,0 +1,17 @@
+// a trait's impls are registered outside the types, and found by type
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/trait.cshl";
+i32 <~ @sint();
+u8  <~ @uchar();
+any <~ @any();
+
+Width <~ trait("Width");
+Width.impl(i32, @struct{ of <~ [x as i32] -> i32 4 as i32; });
+Width.impl(u8,  @struct{ of <~ [x as u8]  -> i32 1 as i32; });
+
+// generic over anything with an impl
+width <~ [x as any] -> i32 Width.of(@typeof(x)).of(x);
+
+v <- 7 as i32;
+(width(5 as i32) == 4) and (width(3 as u8) == 1) and (width(v) == 4)

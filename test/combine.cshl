@@ -1,0 +1,15 @@
+// combine merges two structs: fields keep their defaults, namespace members their values
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/combine.cshl";
+a <~ @struct{ one <~ 1; };
+b <~ @struct{ two <~ 2; x <- 5 as @sint(); };
+c <~ combine(combine(a, b), @struct{
+  three <~ @fn[[], @int(), 3];
+});
+v <- c();
+(@len(c) == 4)
+  and (c.one == 1)
+  and (c.two == 2)
+  and (c.three() == 3)
+  and (v.x == 5)
+  and (@sizeof(c) == @sizeof(@sint()))

@@ -1,7 +1,7 @@
 @using @import @path "lib/bind.cshl";
 
 x <~ 5;
-y <~ 5;
+y <~ 6;
 z <- 0;
 z = (x + y);
 

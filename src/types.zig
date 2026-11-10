@@ -339,14 +339,14 @@ pub const Type = struct {
             .inlineast, .ast => of(@import("ast.zig").Ast),
             .any => return error.NoLayout,
             _ => switch (types.get(self.raw)) {
-                // a function is comptime: its layout is the compiler's
-                // representation of one, not decided yet; a function pointer
-                // is the same entry at runtime
+                // a function is comptime: the compiler holds it as its index
+                // in the evaluator's function table; a function pointer is
+                // the same entry at runtime
                 .@"fn" => if (self.decorators.@"comptime")
-                    error.Unimplemented
+                    of(u32)
                 else
                     try types.cachedLayout(self.raw),
-                .@"struct" => try types.cachedLayout(self.raw),
+                .@"struct", .arr, .@"opaque" => try types.cachedLayout(self.raw),
             },
         };
     }
@@ -362,6 +362,11 @@ pub const TypeMap = struct {
     pub const Entry = union(enum) {
         @"struct": []const StructMember,
         @"fn": []const Type,
+        /// @arr[len, T]
+        arr: struct { len: usize, T: Type },
+        /// @opaqueType("name"): a C type by that name, with no layout here,
+        /// so only used behind pointers
+        @"opaque": []const u8,
     };
 
     const first: u32 = @backingInt(TypeIdx.builtin) + 1;
@@ -374,28 +379,59 @@ pub const TypeMap = struct {
         for (self.entries.items) |e| switch (e) {
             .@"struct" => |members| alloc.free(members),
             .@"fn" => |members| alloc.free(members),
+            .@"opaque" => |name| alloc.free(name),
+            .arr => {},
         };
         self.entries.deinit(alloc);
         self.layouts.deinit(alloc);
     }
 
     pub fn add(self: *@This(), alloc: std.mem.Allocator, decors: *const DecorMap, entry: Entry) !TypeIdx {
+        const idx = try self.reserve(alloc);
+        try self.set(alloc, decors, idx, entry);
+        return idx;
+    }
+
+    /// An index for a type whose entry isn't known yet, such as the struct
+    /// `@this()` names while its block runs; `set` fills it in.
+    pub fn reserve(self: *@This(), alloc: std.mem.Allocator) !TypeIdx {
         const idx: TypeIdx = @fromBackingInt(@intCast(first + @as(u32, @intCast(self.entries.items.len))));
+        try self.entries.ensureUnusedCapacity(alloc, 1);
+        try self.layouts.ensureUnusedCapacity(alloc, 1);
+        self.entries.appendAssumeCapacity(.{ .@"struct" = &.{} });
+        self.layouts.appendAssumeCapacity(error.Unimplemented);
+        return idx;
+    }
+
+    /// Fills in a reserved index and works out its layout.
+    pub fn set(self: *@This(), alloc: std.mem.Allocator, decors: *const DecorMap, idx: TypeIdx, entry: Entry) !void {
+        const i = @backingInt(idx) - first;
         const l: Type.LayoutError!Layout = switch (entry) {
             .@"fn" => .{
                 .size = @sizeOf(*const fn () callconv(.c) void),
                 .alignment = @alignOf(*const fn () callconv(.c) void),
             },
             .@"struct" => |members| structLayout(members, decors, self),
+            .@"opaque" => error.NoLayout,
+            .arr => |a| if (a.T.layout(decors, self)) |el| .{
+                .size = el.?.size * a.len,
+                .alignment = el.?.alignment,
+            } else |e| e,
         };
-        try self.entries.ensureUnusedCapacity(alloc, 1);
-        try self.layouts.ensureUnusedCapacity(alloc, 1);
-        self.entries.appendAssumeCapacity(switch (entry) {
+        const owned: Entry = switch (entry) {
             .@"struct" => |members| .{ .@"struct" = try alloc.dupe(StructMember, members) },
             .@"fn" => |members| .{ .@"fn" = try alloc.dupe(Type, members) },
-        });
-        self.layouts.appendAssumeCapacity(l);
-        return idx;
+            .@"opaque" => |name| .{ .@"opaque" = try alloc.dupe(u8, name) },
+            .arr => entry,
+        };
+        switch (self.entries.items[i]) {
+            .@"struct" => |members| alloc.free(members),
+            .@"fn" => |members| alloc.free(members),
+            .@"opaque" => |name| alloc.free(name),
+            .arr => {},
+        }
+        self.entries.items[i] = owned;
+        self.layouts.items[i] = l;
     }
     fn structLayout(members: []const StructMember, decors: *const DecorMap, types: *const TypeMap) Type.LayoutError!Layout {
         var size: usize = 0;
@@ -443,7 +479,7 @@ test "layout" {
     try std.testing.expectEqual(@sizeOf(*const fn () callconv(.c) void), (try fnptr.layout(&m, &t)).?.size);
     var function = fnptr;
     function.decorators.@"comptime" = true;
-    try std.testing.expectError(error.Unimplemented, function.layout(&m, &t));
+    try std.testing.expectEqual(@sizeOf(u32), (try function.layout(&m, &t)).?.size);
 
     // { char; int; comptime int; fn pointer }: the comptime member takes no space
     const bytes: [8]u8 = @splat(0);

@@ -1,0 +1,4 @@
+// parameters take their arguments as their type; an @ast() parameter takes the syntax
+@bind[add, @fn[[a as @sint(), b as @sint()], @sint(), a + b]];
+@bind[twice, @fn[[x as @ast()], @inlineast(), '(`x + `x)]];
+(add(2, 3) == 5) and (twice(4) == 8)

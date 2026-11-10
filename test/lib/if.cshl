@@ -1,6 +1,7 @@
 @using @import @path "bind.cshl";
 @using @import @path "fn.cshl";
-if <~ ([a as ast]->@inlineast()
+
+if <~ ([a as @ast()]->@inlineast()
   '@if[`@get[a,0],..`@get[a,1]]);
 @struct {
   if <~ if;

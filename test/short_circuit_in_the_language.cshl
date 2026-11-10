@@ -1,0 +1,18 @@
+// and and or don't short circuit, but they're only names: rebound to macros
+// over @if, `a and b` only runs b when it decides the result
+@bind[and, @fn[[a as @ast(), b as @ast()], @inlineast(), '@if[`a, `b, 1 != 1]]];
+@bind[or, @fn[[a as @ast(), b as @ast()], @inlineast(), '@if[`a, 1 == 1, `b]]];
+
+@bind[n, @at@alloca[@sint()]];
+@bind[bump, @fn[[v as @refT(@sint())], @bool(), (v = v + 1) == v]];
+// runtime bools, so the conditions aren't known when this is compiled
+@bind[no, @at@alloca[@bool()]];
+@bind[yes, @at@alloca[@bool()]];
+yes = (1 == 1);
+
+@bind[a, no and bump(n)];   // doesn't bump
+@bind[b, yes or bump(n)];   // doesn't bump
+@bind[c, yes and bump(n)];  // bumps
+@bind[d, no or bump(n)];    // bumps
+
+(n == 2) and (a == no) and (b == yes) and c and d

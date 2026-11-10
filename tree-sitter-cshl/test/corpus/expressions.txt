@@ -40,6 +40,27 @@ Spaced application nests right
           (string_content))))))
 
 ==================
+Pipeline sits between binding and application
+==================
+xs |> f y |> g;
+x <~ xs |> f;
+---
+
+(program
+  (call
+    (call
+      (id)
+      (call
+        (id)
+        (id)))
+    (id))
+  (call
+    (id)
+    (call
+      (id)
+      (id))))
+
+==================
 Application takes an assignment as its argument
 ==================
 f x = y;

@@ -1,0 +1,6 @@
+// integers are arbitrary precision at compile time and C integers once converted
+(2 * 3 + 1 == 7)
+  and (0x10 - 0b11 == 13)
+  and ((5 as @sint()) + 1 == (6 as @sint()))
+  and (7 / 2 == 3)
+  and (@sizeof(@typeof(5 as @sint())) == @sizeof(@sint()))

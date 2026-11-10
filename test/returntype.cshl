@@ -1,0 +1,4 @@
+// @returntype() is the enclosing function's return type
+@bind[f, @fn[[], @uint(), @zero(@returntype())]];
+@bind[g, @fn[[], @type(), @returntype()]];
+(@typeof(f()) == @uint()) and (g() == @type())

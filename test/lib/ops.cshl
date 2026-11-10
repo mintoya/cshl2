@@ -1,0 +1,94 @@
+// operators overloaded through traits: each binary operator has a trait, and
+// `a op b` uses the impl for a's type when it has one, else the builtin.
+//   Add.impl(V, @struct{ add <~ [a as V, b as V] -> V ...; });
+// The impl decides what b can be. The choice is made at compile time, so an
+// operator on types with no impl is the builtin.
+@using @import @path "bind.cshl";
+@using @import @path "fn.cshl";
+@using @import @path "trait.cshl";
+
+any <~ @any();
+
+Add  <~ trait("Add");  raw_add  <~ `@id("+");
+Sub  <~ trait("Sub");  raw_sub  <~ `@id("-");
+Mul  <~ trait("Mul");  raw_mul  <~ `@id("*");
+Div  <~ trait("Div");  raw_div  <~ `@id("/");
+Rem  <~ trait("Rem");  raw_rem  <~ `@id("%");
+Eq   <~ trait("Eq");   raw_eq   <~ `@id("==");
+Ne   <~ trait("Ne");   raw_ne   <~ `@id("!=");
+Lt   <~ trait("Lt");   raw_lt   <~ `@id("<");
+Gt   <~ trait("Gt");   raw_gt   <~ `@id(">");
+Le   <~ trait("Le");   raw_le   <~ `@id("<=");
+Ge   <~ trait("Ge");   raw_ge   <~ `@id(">=");
+Cmp  <~ trait("Cmp");  raw_cmp  <~ `@id("<=>");
+Band <~ trait("Band"); raw_band <~ band;
+Bor  <~ trait("Bor");  raw_bor  <~ bor;
+Bxor <~ trait("Bxor"); raw_bxor <~ bxor;
+Shl  <~ trait("Shl");  raw_shl  <~ shl;
+Shr  <~ trait("Shr");  raw_shr  <~ shr;
+As   <~ trait("As");   raw_as   <~ `@id("as");
+
+add  <~ [a as any, b as any] -> any @if[Add.has(@typeof(a)),  Add.of(@typeof(a)).add(a, b),   raw_add(a, b)];
+sub  <~ [a as any, b as any] -> any @if[Sub.has(@typeof(a)),  Sub.of(@typeof(a)).sub(a, b),   raw_sub(a, b)];
+mul  <~ [a as any, b as any] -> any @if[Mul.has(@typeof(a)),  Mul.of(@typeof(a)).mul(a, b),   raw_mul(a, b)];
+div  <~ [a as any, b as any] -> any @if[Div.has(@typeof(a)),  Div.of(@typeof(a)).div(a, b),   raw_div(a, b)];
+rem  <~ [a as any, b as any] -> any @if[Rem.has(@typeof(a)),  Rem.of(@typeof(a)).rem(a, b),   raw_rem(a, b)];
+eq   <~ [a as any, b as any] -> any @if[Eq.has(@typeof(a)),   Eq.of(@typeof(a)).eq(a, b),     raw_eq(a, b)];
+ne   <~ [a as any, b as any] -> any @if[Ne.has(@typeof(a)),   Ne.of(@typeof(a)).ne(a, b),     raw_ne(a, b)];
+lt   <~ [a as any, b as any] -> any @if[Lt.has(@typeof(a)),   Lt.of(@typeof(a)).lt(a, b),     raw_lt(a, b)];
+gt   <~ [a as any, b as any] -> any @if[Gt.has(@typeof(a)),   Gt.of(@typeof(a)).gt(a, b),     raw_gt(a, b)];
+le   <~ [a as any, b as any] -> any @if[Le.has(@typeof(a)),   Le.of(@typeof(a)).le(a, b),     raw_le(a, b)];
+ge   <~ [a as any, b as any] -> any @if[Ge.has(@typeof(a)),   Ge.of(@typeof(a)).ge(a, b),     raw_ge(a, b)];
+cmp  <~ [a as any, b as any] -> any @if[Cmp.has(@typeof(a)),  Cmp.of(@typeof(a)).cmp(a, b),   raw_cmp(a, b)];
+band_ <~ [a as any, b as any] -> any @if[Band.has(@typeof(a)), Band.of(@typeof(a)).band(a, b), raw_band(a, b)];
+bor_  <~ [a as any, b as any] -> any @if[Bor.has(@typeof(a)),  Bor.of(@typeof(a)).bor(a, b),   raw_bor(a, b)];
+bxor_ <~ [a as any, b as any] -> any @if[Bxor.has(@typeof(a)), Bxor.of(@typeof(a)).bxor(a, b), raw_bxor(a, b)];
+shl_  <~ [a as any, b as any] -> any @if[Shl.has(@typeof(a)),  Shl.of(@typeof(a)).shl(a, b),   raw_shl(a, b)];
+shr_  <~ [a as any, b as any] -> any @if[Shr.has(@typeof(a)),  Shr.of(@typeof(a)).shr(a, b),   raw_shr(a, b)];
+
+// a as T: As's impl for a's type has `to(a, T)`. A macro, because the
+// builtin needs a variable to stay a variable (`x as @refT(@any())`) and
+// still take plain values. It's a callable holding the builtin and the trait,
+// so the expansion reaches them through `as` itself, which is in scope
+// wherever it's used.
+as_call <~ [self as @ast(), a as @ast(), T as @ast()] -> @inlineast() {
+  v <~ @gensym(v);
+  t <~ @gensym(t);
+  '{
+    `v <~ `a;
+    `t <~ `T;
+    @if[(`self).trait.has(@typeof(`v)),
+      (`self).trait.of(@typeof(`v)).to(`v, `t),
+      (`self).raw(`v, `t)]
+  }
+};
+as_ <~ @struct{
+  raw   <~ raw_as;
+  trait <~ As;
+  `'(`@id("()") <~ as_call);
+}();
+
+`'@struct{
+  Add <~ Add; Sub <~ Sub; Mul <~ Mul; Div <~ Div; Rem <~ Rem;
+  Eq <~ Eq; Ne <~ Ne; Lt <~ Lt; Gt <~ Gt; Le <~ Le; Ge <~ Ge; Cmp <~ Cmp;
+  Band <~ Band; Bor <~ Bor; Bxor <~ Bxor; Shl <~ Shl; Shr <~ Shr;
+  `@id("+")   <~ add;
+  `@id("-")   <~ sub;
+  `@id("*")   <~ mul;
+  `@id("/")   <~ div;
+  `@id("%")   <~ rem;
+  `@id("==")  <~ eq;
+  `@id("!=")  <~ ne;
+  `@id("<")   <~ lt;
+  `@id(">")   <~ gt;
+  `@id("<=")  <~ le;
+  `@id(">=")  <~ ge;
+  `@id("<=>") <~ cmp;
+  band <~ band_;
+  bor  <~ bor_;
+  bxor <~ bxor_;
+  shl  <~ shl_;
+  shr  <~ shr_;
+  As     <~ As;
+  as     <~ as_;
+}

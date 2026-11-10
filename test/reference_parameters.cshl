@@ -1,0 +1,8 @@
+// a reference to an ast takes the caller's variable; @refT(@any()) takes any place
+@bind[set, @fn[[v as @refT(@ast()), n as @sint()], @void(), v = n]];
+@bind[inc, @fn[[v as @refT(@any())], @any(), v = v + 1]];
+@bind[x, @at@alloca[@sint()]];
+set(x, 4);
+inc(x);
+inc(x);
+x == 6

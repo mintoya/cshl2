@@ -51,15 +51,23 @@ module.exports = grammar({
 
     // Weakest first:
     //   <~ <-        binding (right-associative)
+    //   |>           pipeline (left-associative): `xs |> f y` is `xs |> (f y)`
     //   f x          spaced application (right-associative): `f (x = y)`
     //   =            assignment (right-associative)
     //   ->           (left-associative): `[a] -> T body` is `([a] -> T) body`
     //   the operator levels in LEVELS, then tight expressions.
-    _expression: $ => choice($._application, alias($._binding, $.call)),
+    _expression: $ => choice($._pipeline, alias($._binding, $.call)),
     _binding: $ => seq(
-      field('argument', $._application),
+      field('argument', $._pipeline),
       field('function', choice('<~', '<-')),
       field('argument', $._expression),
+    ),
+
+    _pipeline: $ => choice($._application, alias($._pipeline_call, $.call)),
+    _pipeline_call: $ => seq(
+      field('argument', $._pipeline),
+      field('function', '|>'),
+      field('argument', $._application),
     ),
 
     _application: $ => choice($._assignment, $.call),

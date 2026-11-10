@@ -1,0 +1,23 @@
+// a slice of an array writes through to it; sub, and iterating with for/each
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/slice.cshl";
+@using @import @path "lib/iter.cshl";
+i32 <~ @sint();
+u64 <~ @ulonglong();
+
+a <- @zero(@arr[5, i32]);
+@get[a, 0] = 1 as i32;
+@get[a, 1] = 2 as i32;
+@get[a, 2] = 3 as i32;
+@get[a, 3] = 4 as i32;
+@get[a, 4] = 5 as i32;
+
+s <~ slice_of(a);
+s:get(0 as u64) = 10 as i32;
+t <~ s:sub(1 as u64, 4 as u64);
+t:get(2 as u64) = 40 as i32;
+sum <- 0 as i32;
+for(t) |> each { sum = sum + _; };
+
+(@get[a, 0] == (10 as i32)) and (@get[a, 3] == (40 as i32)) and (t.len == (3 as u64)) and (sum == (45 as i32))
