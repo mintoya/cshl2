@@ -24,7 +24,7 @@ pub const TypeIdx = enum(u32) {
     //
     builtin,
     _,
-    const cintTypes = enum(u8) {
+    pub const cintTypes = enum(u8) {
         schar,
         sshort,
         sint,
@@ -36,7 +36,7 @@ pub const TypeIdx = enum(u32) {
         ulong,
         ulonglong,
     };
-    const comptimeTypes = enum(u8) {
+    pub const comptimeTypes = enum(u8) {
         builtin,
         type,
         ast,
