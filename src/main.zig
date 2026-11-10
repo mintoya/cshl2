@@ -5,6 +5,7 @@ const clap = @import("clap");
 test "inc" {
     _ = Ast;
     _ = parse;
+    _ = @import("types.zig");
 }
 
 pub fn main(init: std.process.Init) !void {
