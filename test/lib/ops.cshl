@@ -27,6 +27,7 @@ Bxor <~ trait("Bxor"); raw_bxor <~ bxor;
 Shl  <~ trait("Shl");  raw_shl  <~ shl;
 Shr  <~ trait("Shr");  raw_shr  <~ shr;
 As   <~ trait("As");   raw_as   <~ `@id("as");
+Assign <~ trait("Assign"); raw_assign <~ `@id("=");
 
 add  <~ [a as any, b as any] -> any @if[Add.has(@typeof(a)),  Add.of(@typeof(a)).add(a, b),   raw_add(a, b)];
 sub  <~ [a as any, b as any] -> any @if[Sub.has(@typeof(a)),  Sub.of(@typeof(a)).sub(a, b),   raw_sub(a, b)];
@@ -46,27 +47,52 @@ bxor_ <~ [a as any, b as any] -> any @if[Bxor.has(@typeof(a)), Bxor.of(@typeof(a
 shl_  <~ [a as any, b as any] -> any @if[Shl.has(@typeof(a)),  Shl.of(@typeof(a)).shl(a, b),   raw_shl(a, b)];
 shr_  <~ [a as any, b as any] -> any @if[Shr.has(@typeof(a)),  Shr.of(@typeof(a)).shr(a, b),   raw_shr(a, b)];
 
-// a as T: As's impl for a's type has `to(a, T)`. A macro, because the
-// builtin needs a variable to stay a variable (`x as @refT(@any())`) and
-// still take plain values. It's a callable holding the builtin and the trait,
-// so the expansion reaches them through `as` itself, which is in scope
-// wherever it's used.
+// a as T: As's impl for a's type has `to(a, T)`. Without one, as is the
+// inverse of =: a T assigned a, when T has an Assign impl. A macro, because
+// the builtin needs a variable to stay a variable (`x as @refT(@any())`) and
+// still take plain values. It's a callable holding the builtins and the
+// traits, so the expansion reaches them through `as` itself, which is in
+// scope wherever it's used.
 as_call <~ [self as @ast(), a as @ast(), T as @ast()] -> @inlineast() {
   v <~ @gensym(v);
   t <~ @gensym(t);
+  r <~ @gensym(r);
   '{
     `v <~ `a;
     `t <~ `T;
     @if[(`self).trait.has(@typeof(`v)),
       (`self).trait.of(@typeof(`v)).to(`v, `t),
-      (`self).raw(`v, `t)]
+      @if[(`self).assign.has(`t), {
+        @bind[`r, @at@alloca[`t]];
+        (`self).set(`r, (`t)());
+        (`self).assign.of(`t).assign(`r, `v);
+        `r
+      },
+        (`self).raw(`v, `t)]]
   }
 };
 as_ <~ @struct{
-  raw   <~ raw_as;
-  trait <~ As;
+  raw    <~ raw_as;
+  trait  <~ As;
+  set    <~ raw_assign;
+  assign <~ Assign;
   `'(`@id("()") <~ as_call);
 }();
+
+// dst = src: Assign's impl for dst's type has `assign(dst, src)`, with dst as
+// a place; the impl decides what src can be, and every assignment of that
+// type goes through it, copies (and so <-) included. Without one, = is the
+// inverse of as: a src of another type with an As impl is converted to
+// dst's type first. The left side of an assignment is always a place, so
+// unlike as this is a function: its arguments are evaluated once, where it's
+// used (`(x <~ ...) = v` in a @struct block binds x there).
+assign_ <~ [d as @refT(@any()), v as @any()] -> any {
+  D <~ @typeof(d);
+  V <~ @typeof(v);
+  @if[Assign.has(D), Assign.of(D).assign(d, v),
+    @if[(V != D) and As.has(V), raw_assign(d, As.of(V).to(v, D)),
+      raw_assign(d, v)]]
+};
 
 `'@struct{
   Add <~ Add; Sub <~ Sub; Mul <~ Mul; Div <~ Div; Rem <~ Rem;
@@ -91,4 +117,6 @@ as_ <~ @struct{
   shr  <~ shr_;
   As     <~ As;
   as     <~ as_;
+  Assign <~ Assign;
+  `@id("=") <~ assign_;
 }

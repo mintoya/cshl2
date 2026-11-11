@@ -1,0 +1,18 @@
+// = is the inverse of as: without an Assign impl for the place's type, a value
+// of another type with an As impl is converted first; the same type copies
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/ops.cshl";
+i32 <~ @sint();
+V2 <~ @struct{ x <- 0 as i32; y <- 0 as i32; };
+// a V2 as an integer: the sum of its parts
+As.impl(V2, @struct{
+  to <~ [a as V2, T as @type()] -> i32 (a.x + a.y) as T;
+});
+v <- V2();
+v.x = 3 as i32;
+v.y = 4 as i32;
+i <- 0 as i32;
+i = v;
+w <- v;
+(i == (7 as i32)) and (w.x == (3 as i32))

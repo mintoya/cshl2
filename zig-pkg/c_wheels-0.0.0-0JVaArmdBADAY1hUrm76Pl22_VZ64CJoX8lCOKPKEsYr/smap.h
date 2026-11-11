@@ -1,0 +1,135 @@
+#if !defined SXMAP_H
+  #define SXMAP_H (1)
+  #include "allocators/arenaAllocator.h"
+  #include "fptr.h"
+  #include "hxmap.h"
+  #include "macros.h"
+  #include "mytypes.h"
+  #include "oxmap.h"
+typedef struct {
+  union {
+    hxmap hmap[1];
+    oxmap omap[1];
+  };
+  allocfn stringArena;
+} sxmap;
+
+sxmap *smap_new(allocfn allocator, u32 vsize, usize cap, usize arenaSize);
+void *smap_set(sxmap *map, fptr k, void *b);
+void smap_free(sxmap *map);
+void *smap_get(sxmap *map, fptr k);
+  #define msxmap(V) ptrof(fnptrof((sxmap), V))
+  #define msxmap_iType(map) typeof((*map)((sxmap){0}))
+  #define msxmap_defaults(...) VA_SWITCH_REMP((8, 1024)__VA_OPT__(, (__VA_ARGS__)))
+  #define msxmap_init(allocator, V, ...) (msxmap(V)) smap_new(allocator, sizeof(V), msxmap_defaults(__VA_ARGS__))
+  #define msxmap_deinit(map) ((void)sizeof(msxmap_iType(map)), smap_free((sxmap *)map))
+
+  #define msxmap_set(map, k, v) (ptrof(msxmap_iType(map)))(smap_set((sxmap *)map, fp(k), (void *)REF(msxmap_iType(map), v)))
+  #define msxmap_rem(map, k) ((void)smap_set((sxmap *)map, fp(k), nullptr))
+  #define msxmap_get(map, k) (ptrof(msxmap_iType(map))) smap_get((sxmap *)map, fp(k))
+  #define sxmap_iter(map_ptr)                                                                           \
+    ((struct {                                                                                          \
+       typeof(map_ptr) _m;                                                                              \
+       size_t _idx;                                                                                     \
+       struct {                                                                                         \
+         fptr key;                                                                                      \
+         void *val;                                                                                     \
+       } _val[0];                                                                                       \
+     }),                                                                                                \
+     ({._m = (map_ptr), ._idx = 0}),                                                                    \
+     (({                                                                                                \
+       iter_next_t(typeof($iter._val[0])) $result = {0};                                                \
+       while ($iter._idx < ((hxmap *)$iter._m)->cap &&                                                  \
+              !hxmap_occupied((hxmap *)$iter._m, $iter._idx))                                           \
+         ++$iter._idx;                                                                                  \
+       $result.hasvalue = $iter._idx < ((hxmap *)$iter._m)->cap;                                        \
+       if ($result.hasvalue) {                                                                          \
+         $result.value.key = *(typeof($result.value.key) *)hxmap_key_at((hxmap *)$iter._m, $iter._idx); \
+         $result.value.val = (typeof($result.value.val))hxmap_val_at((hxmap *)$iter._m, $iter._idx);    \
+         ++$iter._idx;                                                                                  \
+       }                                                                                                \
+       $result;                                                                                         \
+     })))
+
+  #define msxmap_iter(map_ptr)                                                                          \
+    ((struct {                                                                                          \
+       typeof(map_ptr) _m;                                                                              \
+       size_t _idx;                                                                                     \
+       struct {                                                                                         \
+         fptr key;                                                                                      \
+         ptrof(msxmap_iType(map_ptr)) val;                                                              \
+       } _val[0];                                                                                       \
+     }),                                                                                                \
+     ({._m = (map_ptr), ._idx = 0}),                                                                    \
+     (({                                                                                                \
+       iter_next_t(typeof($iter._val[0])) $result = {0};                                                \
+       while ($iter._idx < ((hxmap *)$iter._m)->cap &&                                                  \
+              !hxmap_occupied((hxmap *)$iter._m, $iter._idx))                                           \
+         ++$iter._idx;                                                                                  \
+       $result.hasvalue = $iter._idx < ((hxmap *)$iter._m)->cap;                                        \
+       if ($result.hasvalue) {                                                                          \
+         $result.value.key = *(typeof($result.value.key) *)hxmap_key_at((hxmap *)$iter._m, $iter._idx); \
+         $result.value.val = (typeof($result.value.val))hxmap_val_at((hxmap *)$iter._m, $iter._idx);    \
+         ++$iter._idx;                                                                                  \
+       }                                                                                                \
+       $result;                                                                                         \
+     })))
+  #include "tests.h"
+test_fn(smap_test) {
+  let map = msxmap_init(allocator, int);
+  defer { msxmap_deinit(map); };
+  char buffer[sizeof("integer ") + 10];
+  foreach (int i, range(0, 50)) {
+    let str = ((fptr){(usize)snprintf(buffer, sizeof(buffer), "integer %i", i), (u8 *)buffer});
+    msxmap_set(map, str, i);
+  }
+  foreach (int i, range(0, 50)) {
+    let str = ((fptr){(usize)snprintf(buffer, sizeof(buffer), "integer %i", i), (u8 *)buffer});
+    let m = msxmap_get(map, str);
+    test_assert(*m == i);
+    if (i % 2) msxmap_rem(map, str);
+  }
+  foreach (int i, range(0, 50)) {
+    let str = ((fptr){(usize)snprintf(buffer, sizeof(buffer), "integer %i", i), (u8 *)buffer});
+    if (!(i % 2)) test_assert(*msxmap_get(map, str) == i);
+    else test_assert(!msxmap_get(map, str));
+  }
+}
+
+u64 hashfptr(void *, const void *a);
+cmpres cmpfptr(void *, const void *a, const void *b);
+#endif
+#if defined SXMAP_C && SXMAP_C == (1) || \
+    (defined __INCLUDE_LEVEL__ && __INCLUDE_LEVEL__ == 0)
+  #undef SXMAP_C
+  #define SXMAP_C (2)
+u64 hashfptr(void *, const void *a) { return fptr_hash(*(fptr *)a); }
+cmpres cmpfptr(void *, const void *a, const void *b) { return fptr_cmp(*(fptr *)a, *(fptr *)b); }
+sxmap *smap_new(allocfn allocator, u32 vsize, usize cap, usize arenaSize) {
+  let res = acreate(allocator, sxmap);
+  hxmap_newm(allocator, sizeof(fptr), vsize, cap, (hxmap_hsh){hashfptr}, (hxmap_cmp){cmpfptr}, res->hmap);
+  // oxmap_newm(allocator, sizeof(fptr), vsize, cmpfptr, res->omap);
+  res->stringArena = arena_new_ext(allocator, arenaSize);
+  return res;
+}
+void smap_free(sxmap *map) {
+  let allocator = map->hmap->allocator;
+  arena_cleanup(map->stringArena);
+  hxmap_freem(map->hmap[0]);
+  adestroy(allocator, map);
+}
+void *smap_set(sxmap *map, fptr k, void *b) {
+  if (!k.len) return nullptr;
+  if (!b) return hxmap_set(map->hmap, &k, nullptr);
+  let copy = P$(
+      hxmap_get(map->hmap, &k),
+      ({
+        $
+            ? *(fptr *)hxmap_val_key(map->hmap, $)
+            : (fptr){k.len, (u8 *)memcpy(acreate(map->stringArena, u8[k.len]), k.ptr, k.len)};
+      })
+  );
+  return hxmap_set(map->hmap, &copy, b);
+}
+void *smap_get(sxmap *map, fptr k) { return hxmap_get(map->hmap, &k); }
+#endif

@@ -29,6 +29,9 @@ pub const Error = error{ OutOfMemory, CompileError };
 pub const Diagnostic = struct {
     msg: []const u8 = "",
     at: ?SrcRef = null,
+    /// the calls the error came through, innermost first: where each
+    /// function or macro was called from
+    trace: std.ArrayList(SrcRef) = .empty,
 };
 
 pub const Scope = struct {
@@ -53,7 +56,7 @@ pub const Scope = struct {
 
 /// A parameter. A type that names an earlier parameter is evaluated per
 /// call, from `T_ast`; until then T is @any().
-const Param = struct { name: []const u8, T: Type, T_ast: ?Ast = null };
+const Param = struct { name: []const u8, T: Type, T_ast: ?Ast = null, at: Ast = .{ .nil = undefined } };
 
 const Function = struct {
     params: []const Param,
@@ -81,6 +84,22 @@ const IntVal = union(enum) {
     c: struct { kind: CInt, v: i128 },
 };
 
+/// What a compiler plugin is told: an outside program watching compilation,
+/// which keeps whatever it wants (a source map of types, uses of names).
+/// Every binding gets an id; a use names the binding it found.
+pub const Message = union(enum) {
+    /// a name bound: its id, the binding it was copied from (@using) or 0,
+    /// where it's written, and the type of its value
+    bind: struct { id: u64, origin: u64, name: []const u8, at: ?SrcRef, T: Type, holds: ?Type },
+    /// a name, or a struct member, used: the binding it resolved to (0 when
+    /// that binding wasn't reported, like the builtin operators)
+    use: struct { id: u64, at: ?SrcRef },
+};
+pub const Hook = struct {
+    ctx: ?*anyopaque,
+    send: *const fn (ctx: ?*anyopaque, msg: *const Message) void,
+};
+
 pub const Eval = struct {
     gpa: std.mem.Allocator,
     io: std.Io,
@@ -98,6 +117,16 @@ pub const Eval = struct {
     /// argument bytes: the same arguments give the same type
     type_calls: std.StringHashMapUnmanaged(Value) = .empty,
     gensyms: u32 = 0,
+    /// a struct's name: the first one it was bound to, outside its own block
+    /// and outside a function body; type names print it
+    struct_names: std.AutoHashMapUnmanaged(TypeIdx, []const u8) = .empty,
+    /// the plugin told about bindings and uses; nothing is recorded without one
+    hook: ?Hook = null,
+    /// binding ids, by scope and the name's index in it
+    binding_ids: std.AutoHashMapUnmanaged(struct { scope: usize, index: usize }, u64) = .empty,
+    /// the binding a struct member came from, by struct and member index
+    member_ids: std.AutoHashMapUnmanaged(struct { T: TypeIdx, index: usize }, u64) = .empty,
+    next_binding: u64 = 1,
     repeat: bool = false,
     /// while lowering: how many runtime branches the code being lowered is in
     rt_branch: u32 = 0,
@@ -259,7 +288,7 @@ pub const Eval = struct {
         return l.?;
     }
 
-    fn structMembers(self: *Eval, T: Type) ?[]const types.TypeMap.StructMember {
+    pub fn structMembers(self: *Eval, T: Type) ?[]const types.TypeMap.StructMember {
         if (@intFromEnum(T.raw) <= @intFromEnum(TypeIdx.builtin)) return null;
         if (self.isPtr(T)) return null;
         return switch (self.types.get(T.raw)) {
@@ -268,7 +297,7 @@ pub const Eval = struct {
         };
     }
 
-    fn fnEntry(self: *Eval, T: Type) ?[]const Type {
+    pub fn fnEntry(self: *Eval, T: Type) ?[]const Type {
         if (@intFromEnum(T.raw) <= @intFromEnum(TypeIdx.builtin)) return null;
         if (self.isPtr(T)) return null;
         return switch (self.types.get(T.raw)) {
@@ -277,7 +306,7 @@ pub const Eval = struct {
         };
     }
 
-    fn arrEntry(self: *Eval, T: Type) ?@FieldType(types.TypeMap.Entry, "arr") {
+    pub fn arrEntry(self: *Eval, T: Type) ?@FieldType(types.TypeMap.Entry, "arr") {
         if (@intFromEnum(T.raw) <= @intFromEnum(TypeIdx.builtin)) return null;
         if (self.isPtr(T)) return null;
         return switch (self.types.get(T.raw)) {
@@ -807,7 +836,9 @@ pub const Eval = struct {
             const r = try self.newReg(try self.passType(p.T));
             try self.emit(.{ .arg = .{ .idx = @intCast(i), .d = r } });
             try self.func().params.append(self.gpa, r);
-            try sc.names.put(self.gpa, p.name, try self.rtValue(p.T, r));
+            const pv = try self.rtValue(p.T, r);
+            try sc.names.put(self.gpa, p.name, pv);
+            try self.reportBind(sc, p.name, pv, p.at, 0);
             try self.func().reg_names.put(self.gpa, r, p.name);
         }
         const result = try self.evalIn(&.{f.body}, sc);
@@ -1190,6 +1221,7 @@ pub const Eval = struct {
             const b = builtinByName(name[1..]) orelse return self.fail(at, "no builtin `{s}`", .{name});
             return self.builtinValue(b);
         }
+        self.reportUse(scope, name, at);
         return scope.lookup(name) orelse self.fail(at, "`{s}` isn't bound", .{name});
     }
 
@@ -1386,6 +1418,8 @@ pub const Eval = struct {
         const f = self.fns.items[handle];
         if (args.len != f.params.len)
             return self.fail(at, "expected {d} argument(s), found {d}", .{ f.params.len, args.len });
+        // an error from inside goes through this call: where it's called from
+        errdefer if (firstRef(at)) |r| self.diag.trace.append(self.gpa, r) catch {};
         // while lowering, a function over runtime types is a call to a C
         // function; any other function runs here, inlining what it lowers
         if (self.rt != null and try self.isRuntimeFn(f)) return self.callLowered(handle, args, at, caller);
@@ -1440,6 +1474,10 @@ pub const Eval = struct {
             if (self.type_calls.get(bytes.items)) |v| return v;
             key = bytes.items;
         }
+        // the parameters are bindings when the body runs, not on an
+        // interned result
+        if (self.hook != null) for (f.params) |p|
+            try self.reportBind(sc, p.name, sc.names.get(p.name).?.?, p.at, 0);
         // a function giving a type, or a @comptime(T), runs at compile time
         // a body building syntax runs at compile time too; what it builds
         // runs where it's used
@@ -1509,6 +1547,10 @@ pub const Eval = struct {
             return self.fail(at, "{f} has no members", .{self.typeName(owner)});
         for (members, 0..) |m, i| {
             if (!std.mem.eql(u8, m.name, name)) continue;
+            if (self.hook) |h| h.send(h.ctx, &.{ .use = .{
+                .id = self.member_ids.get(.{ .T = owner.raw, .index = i }) orelse 0,
+                .at = firstRef(name_ast),
+            } });
             if (m.type.decorators.@"comptime") return .{ .T = m.type, .mem = @constCast(m.value) };
             if (owner.raw != vt.raw or vt.raw == .type)
                 return self.fail(at, "`{s}` is a field; it needs a value of {f}", .{ name, self.typeName(owner) });
@@ -1936,7 +1978,10 @@ pub const Eval = struct {
                 try self.arity(args, 2, b, at);
                 const name = headText(args[0]) orelse return self.fail(args[0], "@bind needs a name", .{});
                 const v = try self.eval(args[1], scope);
-                try self.bindNew(scope, name, v, args[0]);
+                // `x <~ y` is an alias: its origin is the binding y found
+                const origin = if (self.hook != null and args[1] == .id) self.bindingOf(scope, args[1].id.gets()) else 0;
+                try self.bindNew(scope, name, v, args[0], origin);
+                try self.nameStruct(scope, name, v);
                 try self.nameReg(name, v);
                 return v;
             },
@@ -1950,8 +1995,10 @@ pub const Eval = struct {
                 try self.arity(args, 1, b, at);
                 const T = try self.typeArg(args[0], scope);
                 const members = self.structMembers(T) orelse return self.fail(at, "@using needs a struct, found {f}", .{self.typeName(T)});
-                for (members) |m| if (m.type.decorators.@"comptime")
-                    try self.bindNew(scope, m.name, .{ .T = m.type, .mem = @constCast(m.value) }, at);
+                for (members, 0..) |m, i| if (m.type.decorators.@"comptime") {
+                    const origin = self.member_ids.get(.{ .T = T.raw, .index = i }) orelse 0;
+                    try self.bindNew(scope, m.name, .{ .T = m.type, .mem = @constCast(m.value) }, at, origin);
+                };
                 return self.voidValue();
             },
             .path => {
@@ -2099,11 +2146,52 @@ pub const Eval = struct {
 
     /// Binds name in scope; a name is bound once per scope. Inner scopes can
     /// shadow it, and @unbind frees it to be bound again.
-    fn bindNew(self: *Eval, scope: *Scope, name: []const u8, v: Value, at: Ast) Error!void {
+    fn bindNew(self: *Eval, scope: *Scope, name: []const u8, v: Value, at: Ast, origin: u64) Error!void {
         const gop = try scope.names.getOrPut(self.gpa, name);
         if (gop.found_existing and gop.value_ptr.* != null)
             return self.fail(at, "`{s}` is already bound in this scope", .{name});
         gop.value_ptr.* = v;
+        try self.reportBind(scope, name, v, at, origin);
+    }
+
+    /// Tells the plugin name is bound in scope; a no-op without one.
+    fn reportBind(self: *Eval, scope: *Scope, name: []const u8, v: Value, at: Ast, origin: u64) Error!void {
+        const h = self.hook orelse return;
+        const index = scope.names.getIndex(name) orelse return;
+        const id = self.next_binding;
+        self.next_binding += 1;
+        try self.binding_ids.put(self.gpa, .{ .scope = @intFromPtr(scope), .index = index }, id);
+        // a binding whose value is a type: that type, so a plugin can show it
+        const held: ?Type = if (stripRef(v.T).raw == .type and !self.isPtr(v.T)) get(Type, v) else null;
+        h.send(h.ctx, &.{ .bind = .{ .id = id, .origin = origin, .name = name, .at = firstRef(at), .T = v.T, .holds = held } });
+    }
+
+    /// Gives a struct type its name, the first time one is bound to it where
+    /// the name means it: not in its own block (`Self <~ @this()`), and not in
+    /// a function body, where every call would name its result the same.
+    fn nameStruct(self: *Eval, scope: *Scope, name: []const u8, v: Value) Error!void {
+        if (stripRef(v.T).raw != .type or self.isPtr(v.T)) return;
+        const T = get(Type, v);
+        if (self.isPtr(T) or self.structMembers(T) == null) return;
+        if (self.struct_names.contains(T.raw)) return;
+        var s: ?*Scope = scope;
+        while (s) |sc| : (s = sc.parent) if (sc.ret != null or sc.this == T.raw) return;
+        try self.struct_names.put(self.gpa, T.raw, name);
+    }
+
+    /// The id of the binding name finds from scope; 0 if it wasn't reported.
+    fn bindingOf(self: *Eval, scope: *Scope, name: []const u8) u64 {
+        var s: ?*Scope = scope;
+        return while (s) |sc| : (s = sc.parent) {
+            if (sc.names.getIndex(name)) |i|
+                break self.binding_ids.get(.{ .scope = @intFromPtr(sc), .index = i }) orelse 0;
+        } else 0;
+    }
+
+    /// Tells the plugin name was used at `at`, and which binding it found.
+    fn reportUse(self: *Eval, scope: *Scope, name: []const u8, at: Ast) void {
+        const h = self.hook orelse return;
+        h.send(h.ctx, &.{ .use = .{ .id = self.bindingOf(scope, name), .at = firstRef(at) } });
     }
 
     fn equal(self: *Eval, l: Value, r: Value, at: Ast) Error!bool {
@@ -2147,7 +2235,7 @@ pub const Eval = struct {
             // a type naming an earlier parameter waits for the call
             const dependent = namesAny(p.call[2], params.items);
             const T = if (dependent) mk(.any) else try self.typeArg(p.call[2], scope);
-            try params.append(self.gpa, .{ .name = p.call[1].id.gets(), .T = T, .T_ast = if (dependent) p.call[2] else null });
+            try params.append(self.gpa, .{ .name = p.call[1].id.gets(), .T = T, .T_ast = if (dependent) p.call[2] else null, .at = p.call[1] });
             try sig.append(self.gpa, T);
         }
         const ret_dependent = namesAny(args[1], params.items);
@@ -2237,6 +2325,16 @@ pub const Eval = struct {
             _ = try self.eval(sc.defers.items[i], sc);
         }
         try self.setStruct(idx, sc, at);
+        // a member is the binding it came from, for the plugin
+        if (self.hook != null) {
+            var at_member: usize = 0;
+            for (sc.names.values(), 0..) |entry, n| {
+                if (entry == null) continue;
+                if (self.binding_ids.get(.{ .scope = @intFromPtr(sc), .index = n })) |id|
+                    try self.member_ids.put(self.gpa, .{ .T = idx, .index = at_member }, id);
+                at_member += 1;
+            }
+        }
         return self.typeValue(mk(idx));
     }
 
@@ -2261,6 +2359,8 @@ pub const Eval = struct {
         if (self.files.get(path)) |entry|
             return entry orelse self.fail(at, "{s} imports itself", .{path});
         try self.files.put(self.gpa, path, null);
+        // an error in the file goes through this import
+        errdefer if (firstRef(at)) |r| self.diag.trace.append(self.gpa, r) catch {};
         const v = try self.atCompileTime(evalFile, .{ self, path, @as(?Ast, at) });
         try self.files.put(self.gpa, path, v);
         return v;
@@ -2323,7 +2423,10 @@ pub const Eval = struct {
         if (@intFromEnum(T.raw) <= @intFromEnum(TypeIdx.builtin)) {
             try w.print("@{s}()", .{@tagName(T.raw)});
         } else switch (self.types.get(T.raw)) {
-            .@"struct" => try w.print("@struct#{d}", .{@intFromEnum(T.raw)}),
+            .@"struct" => if (self.struct_names.get(T.raw)) |name|
+                try w.writeAll(name)
+            else
+                try w.print("@struct#{d}", .{@intFromEnum(T.raw)}),
             .@"opaque" => |name| try w.print("@opaqueType(\"{s}\")", .{name}),
             .arr => |a| {
                 try w.print("@arr[{d}, ", .{a.len});

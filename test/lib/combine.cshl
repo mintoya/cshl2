@@ -1,33 +1,27 @@
-// combine(a, b): one struct with the members of both, in order: fields with
-// their defaults, namespace members with their values. Built as syntax, one
-// declaration per member, then made with @struct `fields.
+// combine(a, b): one struct with the members of both: the namespaces through
+// @using, and each field bound to a value's, so it keeps its default.
 @using @import @path "bind.cshl";
 @using @import @path "fn.cshl";
 type <~ @type();
 
-combine <~ [a as type, b as type] -> type {
-  av <~ a();
-  bv <~ b();
-  fields <- '{};
+// `@bind[n, v.n]` for each field n of T: in a @struct block, a field of v
+// bound like that is a field, with v's value as its default
+fields <~ [T as type, v as @ast()] -> @ast() {
+  out <- '{};
   i <- 0;
-  @loop @if[i < @len(a), {
-    n <~ @fieldname(a, i);
-    fields = '{..`fields; `(@if[@iscomptime(@fieldval(av, i)),
-      '(@bind[`n, av.`n]),
-      '(@bind[`n, @at@alloca[@typeof(av.`n)]] = av.`n)])};
+  @loop @if[i < @len(T), {
+    n <~ @fieldname(T, i);
+    @if[@iscomptime(@fieldval(T(), i)) == (1 == 0), out = '{ ..`out; @bind[`n, (`v).`n]; }];
     i = i + 1;
     @repeat()
   }];
-  i = 0;
-  @loop @if[i < @len(b), {
-    n <~ @fieldname(b, i);
-    fields = '{..`fields; `(@if[@iscomptime(@fieldval(bv, i)),
-      '(@bind[`n, bv.`n]),
-      '(@bind[`n, @at@alloca[@typeof(bv.`n)]] = bv.`n)])};
-    i = i + 1;
-    @repeat()
-  }];
-  @struct `fields
+  out
+};
+
+combine <~ [a as type, b as type] -> type {
+  av <- a();
+  bv <- b();
+  @struct `('{ @using a; @using b; ..`(fields(a, av)); ..`(fields(b, bv)); })
 };
 
 @struct{ combine <~ combine; }

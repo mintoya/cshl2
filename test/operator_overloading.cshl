@@ -27,6 +27,14 @@ Eq.impl(V2, @struct{
   eq <~ [a as V2, b as V2] -> @bool() (a.x == b.x) and (a.y == b.y);
 });
 
+// a V2 assigned a V2 copies it; assigned an i32, sets both parts
+Assign.impl(V2, @struct{
+  assign <~ [d as @refT(V2), v as @any()] -> V2 {
+    @if[@typeof(v) == V2, { d.x = v.x; d.y = v.y; }, { d.x = v; d.y = v; }];
+    d
+  };
+});
+
 n <- 3 as i32;   // runtime, so the builtins still lower
 s <- (v2(1 as i32, 2 as i32) + v2(10 as i32, 20 as i32)) * n;
 
@@ -36,3 +44,4 @@ s <- (v2(1 as i32, 2 as i32) + v2(10 as i32, 20 as i32)) * n;
   and ((5 shl 1) == 10)
   and ((s as i32) == (99 as i32))
   and (((n as @refT(@any())) = 4 as i32) == n)
+  and ({ w <- v2(1 as i32, 2 as i32); w = 7 as i32; (w.x == (7 as i32)) and (w.y == (7 as i32)) })

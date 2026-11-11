@@ -1,0 +1,11 @@
+// as is the inverse of =: without an As impl for the value's type, v as T is
+// a T assigned v, by T's Assign impl
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/ops.cshl";
+@using @import @path "lib/optional.cshl";
+i32 <~ @sint();
+a <- 5 as ?(i32);
+b <- null as ?(i32);
+n <- 7 as i32;
+c <- n as ?(i32);
+a.present and (a.value == (5 as i32)) and (b.present == (1 != 1)) and c.present and (c.value == n)

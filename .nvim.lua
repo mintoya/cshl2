@@ -22,6 +22,14 @@ vim.treesitter.query.set("cshl", "highlights",
   table.concat(vim.fn.readfile(grammar .. "/queries/highlights.scm"), "\n"))
 vim.filetype.add({ extension = { cshl = "cshl" } })
 
+-- The language server, from `zig build`.
+vim.lsp.config("cshl", {
+  cmd = { root .. "/zig-out/bin/cshl-lsp" },
+  filetypes = { "cshl" },
+  root_markers = { "build.zig" },
+})
+vim.lsp.enable("cshl")
+
 local function start(buf)
   local name = vim.api.nvim_buf_get_name(buf)
   if vim.bo[buf].filetype == "cshl" and name:sub(1, #root + 1) == root .. "/" then

@@ -48,8 +48,14 @@ c_runtime_allocator <- {
     mem     as @ptr(uc),
     from    as ull,
     to      as ull,
-  ] -> @ptr(uc) 
-    @cexpr[@typeof(@returntype()()),"realloc(a1,a3)"]);
+  ] -> @ptr(uc) {
+    _ <~ mem;
+    @unbind(_);
+    _ <~ from;
+    @unbind(_);
+    _ <~ to;
+    @cexpr[@typeof(@returntype()()),"realloc(a1,a3)"] 
+  });
   tmp
 };
 

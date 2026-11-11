@@ -58,23 +58,20 @@ range <~ [start as any, end as any] -> any {
     place <- start;
     end   <~ end;
   };
+  postinc[value as anyref]->any{
+    result <~ value as any;
+    value = value + 1;
+    result
+  };
   Iterator.impl(ResultType, @struct{
     Item  <~ @typeof(start);
     State <~ ResultType;
     start <~ [i as ResultType] -> ResultType i;
-    next  <~ [s as @refT(ResultType)] -> ?Item {
-      rt <~ @returntype();
-      s.place = s.place + 1;
-      if s.place > s.end 
-        (rt.null, {
-          val <- rt();
-          val.value = (s.place - 1);
-          val.present = (1==1);
-          val
-        })
-    };
+    next  <~ [s as @refT(ResultType)] -> ?Item 
+      if s.place < s.end 
+        (postinc(s.place) as @returntype(), null);
   });
-  ResultType();
+  ResultType()
 };
 
 @struct{

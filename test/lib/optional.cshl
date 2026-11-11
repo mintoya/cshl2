@@ -1,29 +1,43 @@
 @using @import @path "bind.cshl";
 @using @import @path "fn.cshl";
 @using @import @path "if.cshl";
-
-type <~ @type() as @type();
-bool <~ @bool() as type;
-ast  <~ @ast()  as type;
-inline  <~ @inlineast() as type;
+@using @import @path "trait.cshl";
+@using @import @path "types.cshl";
+@using @import @path "ops.cshl";
 null <~ @void()();
 ? <~ ((
   T as type,
-) -> type @struct{
-  present <- (1 != 1);
-  value   <- @zero(T);
-  orelse  <~ ((self as ast, otherwise as ast) -> inline {
-    temp <~ @gensym(temp);
-    '{
-      `temp <~ `self;
-      `@outlineast(if (`temp).present 
-        ((`temp).value, `otherwise))
-    }
+) -> type { 
+  result <~ @struct{
+    present <- (1 != 1);
+    value   <- @zero(T);
+    orelse  <~ ((self as ast, otherwise as ast) -> inline {
+      temp <~ @gensym(temp);
+      '{
+        `temp <~ `self;
+        `@outlineast(if (`temp).present 
+          ((`temp).value, `otherwise))
+      }
+    });
+    null <~ @this()();
+    from <~ [value as T]->@this() {
+      result <- @returntype()();
+      result.present = (1==1);
+      result.value = value;
+      result
+    };
+  };
+  Assign.impl(result, @struct{
+    assign <~ [d as @refT(result), v as @any()] -> result {
+      @if[@typeof(v) == result, { d.present = v.present; d.value = v.value; },
+        @if[@typeof(v) == @void(), d.present = (1 != 1),
+          { d.present = (1 == 1); d.value = v; }]];
+      d
+    };
   });
-  null <~ @this()();
+  result
 });
 
-// @zero(?i32):orelse(5 as i32) == (5 as i32);
 @struct{
   ? <~ ?;
   null <~ null;

@@ -76,10 +76,7 @@ pub fn main(init: std.process.Init) !void {
     var e = try eval.Eval.init(arena, init.io);
     const v = e.evalFile(path, null) catch |err| switch (err) {
         error.CompileError => {
-            if (e.diag.at) |at| switch (at.src.*) {
-                .disk => |d| report(d.filename, d.content, at.off, e.diag.msg),
-                .memory => std.debug.print("<macro>: error: {s}\n", .{e.diag.msg}),
-            } else std.debug.print("{s}: error: {s}\n", .{ path, e.diag.msg });
+            reportDiag(&e, path);
             std.process.exit(1);
         },
         else => return err,
@@ -133,6 +130,15 @@ fn reportDiag(e: *eval.Eval, path: []const u8) void {
         .disk => |d| report(d.filename, d.content, at.off, e.diag.msg),
         .memory => std.debug.print("<macro>: error: {s}\n", .{e.diag.msg}),
     } else std.debug.print("{s}: error: {s}\n", .{ path, e.diag.msg });
+    // the calls it came through
+    for (e.diag.trace.items) |r| switch (r.src.*) {
+        .disk => |d| {
+            const line = std.mem.count(u8, d.content[0..r.off], "\n") + 1;
+            const col = r.off - (if (std.mem.lastIndexOfScalar(u8, d.content[0..r.off], '\n')) |nl| nl + 1 else 0) + 1;
+            std.debug.print("{s}:{d}:{d}: note: called from here\n", .{ d.filename, line, col });
+        },
+        .memory => {},
+    };
 }
 
 fn report(path: []const u8, src: []const u8, off: u32, msg: []const u8) void {
