@@ -3,7 +3,7 @@
 //!   id, number          -> .id, .num
 //!   string              -> .str, the text between the quotes (escapes kept raw)
 //!   [a, b] / (a, b)     -> ([] a b)
-//!   {a; b} / program    -> ({} a b)
+//!   {a; b} / program    -> ({} a b); {a; b;} -> ({} a b nil), so it yields void
 //!   call                -> (function arguments...), e.g. a + b -> (+ a b)
 //!
 //! Comments are dropped. `[]` and `{}` point into `builtin_file`, since the
@@ -147,6 +147,19 @@ const Converter = struct {
             const child = ts.ts_node_named_child(n, i);
             if (ts.ts_node_symbol(child) == self.ids.comment) continue;
             try items.append(self.gpa, try self.node(child));
+        }
+        // a trailing ; ends a block with nil, so it yields void
+        if (head.id.off == block_head.id.off) {
+            var last: ?ts.TSNode = null;
+            var j: u32 = 0;
+            while (j < ts.ts_node_child_count(n)) : (j += 1) {
+                const child = ts.ts_node_child(n, j);
+                if (ts.ts_node_symbol(child) == self.ids.comment) continue;
+                if (std.mem.eql(u8, std.mem.span(ts.ts_node_type(child)), "}")) continue;
+                last = child;
+            }
+            if (last) |l| if (std.mem.eql(u8, std.mem.span(ts.ts_node_type(l)), ";"))
+                try items.append(self.gpa, .{ .nil = self.ref(l) });
         }
         return .{ .call = try items.toOwnedSlice(self.gpa) };
     }

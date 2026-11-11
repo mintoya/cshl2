@@ -81,6 +81,7 @@ pub fn main(init: std.process.Init) !void {
         },
         else => return err,
     };
+    //std.debug.print("types: {}", .{e.types.entries.items.len});
     std.debug.print("{f}\n", .{e.fmtValue(v)});
 }
 

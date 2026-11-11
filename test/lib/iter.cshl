@@ -9,9 +9,9 @@
 @using @import @path "fn.cshl";
 @using @import @path "trait.cshl";
 @using @import @path "optional.cshl";
+@using @import @path "types.cshl";
+@using @import @path "ops.cshl";
 
-type <~ @type();
-any  <~ @any();
 
 Iterator <~ trait_checked("Iterator", [I as type] -> type {
   @if[@fieldtype(@typeof(I.next), 1) != ?(I.Item),
@@ -33,6 +33,28 @@ for <~ [c as any] -> any {
   r
 };
 
+range <~ [start as any, end as any] -> any {
+  @using @import @path "if.cshl";
+  ResultType <~ @struct {
+    place <- start;
+    end   <~ end;
+  };
+  postinc <~ [value as anyref]->any {
+    result <~ value as any;
+    value = value + 1;
+    result
+  };
+  Iterator.impl(ResultType, @struct{
+    Item  <~ @typeof(start);
+    State <~ ResultType;
+    start <~ [i as ResultType] -> ResultType i;
+    next  <~ [s as @refT(ResultType)] -> ?Item {
+      if s.place < s.end 
+        (postinc(s.place) as @returntype(), null as @returntype()) 
+    };
+  });
+  ResultType()
+};
 // it |> each {body}: runs body for each element of the iteration piped in
 // as _, with the element bound to _
 each <~ [body as @ast()] -> @inlineast() {
@@ -51,32 +73,43 @@ each <~ [body as @ast()] -> @inlineast() {
     };
   }
 };
-
-range <~ [start as any, end as any] -> any {
-  @using @import @path "if.cshl";
-  ResultType <~ @struct {
-    place <- start;
-    end   <~ end;
-  };
-  postinc[value as anyref]->any{
-    result <~ value as any;
-    value = value + 1;
-    result
-  };
-  Iterator.impl(ResultType, @struct{
-    Item  <~ @typeof(start);
-    State <~ ResultType;
-    start <~ [i as ResultType] -> ResultType i;
-    next  <~ [s as @refT(ResultType)] -> ?Item 
-      if s.place < s.end 
-        (postinc(s.place) as @returntype(), null);
-  });
-  ResultType()
+// it |> filter {cond}: an iteration of the elements of it cond is true for,
+// with the element bound to _ in cond. It's its own type with an Iterator
+// impl, wrapping the iteration piped in.
+filter <~ [body as @ast()] -> @inlineast() {
+  s <~ @gensym(s);
+  r <~ @gensym(r);
+  x <~ @gensym(x);
+  '{
+    `s <- _;
+    {
+      `r <~ @struct { inner <- @typeof(`s)(); };
+      Iterator.impl(`r, @struct{
+        Item  <~ @typeof(`s).impl.Item;
+        State <~ `r;
+        start <~ [i as `r] -> `r i;
+        next  <~ [st as @refT(`r)] -> @fieldtype(@typeof(@typeof(`s).impl.next), 1) @loop {
+          `x <~ @typeof(st.inner).impl.next(st.inner.state);
+          @if[(`x).present, {
+            @bind[_, (`x).value];
+            @if[`body, {}, @repeat()];
+          }];
+          `x
+        };
+      });
+      `x <~ @at@alloca[`r];
+      (`x).inner = `s;
+      for(`x)
+    }
+  }
 };
 
+
+ 
 @struct{
-  Iterator <~ Iterator;
-  for <~ for;
-  each <~ each;
-  range <~ range;
+  Iterator  <~ Iterator;
+  for       <~ for;
+  each      <~ each;
+  filter    <~ filter;
+  range     <~ range;
 }

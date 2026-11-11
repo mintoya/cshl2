@@ -1,0 +1,54 @@
+// try skips the rest of its block at an error, which becomes the block's
+// value; catch gives a value either way; errdefer runs only on an error
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/if.cshl";
+@using @import @path "lib/types.cshl";
+@using @import @path "lib/ops.cshl";
+@using @import @path "lib/error.cshl";
+@using @import @path "lib/error_union.cshl";
+i32 <~ ii;
+
+// registered first, so TooBig's number isn't 1
+unused  <~ error.get "Unused";
+too_big <~ error.get "TooBig";
+
+// x, or TooBig past 10
+check <~ [x as i32] -> !i32
+  @if[x > (10 as i32), (!i32).from(too_big), (!i32).from(x)];
+
+cleaned <- 0 as i32;
+reached <- 0 as i32;
+sum <~ [
+  a as i32,
+  b as i32,
+  cleaned as @refT(i32),
+  reached as @refT(i32)
+] -> !i32 {
+  check(a):try {
+  x <~ _;
+  errdefer {cleaned = cleaned + (1 as i32)};
+  check(b):try {
+    reached = reached + (1 as i32);
+    x + _
+}}};
+
+// errdefer has the error as _
+seen <- error_T();
+keep <~ [x as i32, seen as @refT(error_T)] -> !void {
+  errdefer {seen = _};
+  check(x):try {
+  _ ;
+}};
+keep(20 as i32, seen);
+
+good <~ sum(1 as i32, 2 as i32, cleaned, reached);
+bad  <~ sum(1 as i32, 20 as i32, cleaned, reached);
+(good:ok()) and (good.value == (3 as i32))
+  and (bad:ok() == (1 == 0)) 
+  and (bad.err == too_big)
+  and (bad:catch(0 as i32) == (0 as i32)) 
+  and (good:catch(0 as i32) == (3 as i32))
+  and (cleaned == (1 as i32)) 
+  and (reached == (1 as i32))
+  and (seen == too_big)

@@ -5,8 +5,8 @@
 @using @import @path "lib/fmt.cshl";
 // runs at compile time, so the buffer is written then
 report <~ [n as @int(), wide as @int()] -> @comptime(@void()) {
-  b <~ @at(@alloc[ct_buffer]);
-  fmt(b, ["field % of % is 1//4 wide, not %", n, "Point", wide]);
-  @compileError(b:text())
+  @at(@alloca[ct_buffer])
+  |> { fmt(_, ["field % of % is 1//4 wide, not %", n, "Point", wide]); _ }
+  |> @compileError(_:text())
 };
 report(2, 0 - 40)

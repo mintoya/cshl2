@@ -1,0 +1,118 @@
+// error unions: !T is a T, or the error_T that stopped it. err.n is 0 when
+// there's a value, since no error has number 0.
+//   r <~ (!i32).from(v)          from a T, an error_T, or another !
+//   e as !void                    any error_T or ! as a !void: its error only
+//   r:catch(handler)              r's value, or handler with the error as _
+//   r:try { rest }                when r has a value, rest with it as _, as a
+//                                 value of r's type; otherwise r, so its
+//                                 error is the value and rest never runs.
+//                                 A rest ending in ; makes it a !void.
+//   errdefer stmt                 a @defer that runs when the scope yields an
+//                                 error, with the error as _
+// There's no return: a failed try is a branch, with the rest of the block
+// in the other.
+@using @import @path "bind.cshl";
+@using @import @path "fn.cshl";
+@using @import @path "if.cshl";
+@using @import @path "trait.cshl";
+@using @import @path "types.cshl";
+@using @import @path "ops.cshl";
+@using @import @path "fmt.cshl";
+@using @import @path "error.cshl";
+
+ErrorUnion <~ trait("ErrorUnion");
+is_union <~ [T as type] -> @comptime(bool) ErrorUnion.has(T);
+
+// d = v for a ! place d: v a value of its T, an error_T, or a !. A !void
+// keeps only the error, so any error or ! goes into one.
+put <~ [d as @refT(any), v as any] -> void {
+  V <~ @typeof(v);
+  keeps <~ @typeof(d).Value != void;
+  @if[is_union(V), { d.err = v.err; @if[keeps, @if[v:ok(), d.value = v.value]]; },
+    @if[V == error_T, d.err = v,
+      { d.err = error_T(); @if[keeps, d.value = v]; }]];
+};
+
+union <~ [T as type] -> type {
+  R <~ @struct{
+    err   <- error_T();
+    value <- @zero(T);
+    Value <~ T;
+
+    ok   <~ [self as @this()] -> bool self.err.n == (0 as ui);
+    from <~ [v as any] -> @this() {
+      r <- @this()();
+      put(r, v);
+      r
+    };
+    // x:try { rest }: when x has a value, rest with it bound to _, as a
+    // value of x's type; otherwise x, so the error is the block's value.
+    // A rest that yields void, a block ending in ; or an empty one, makes
+    // it a !void, and x's error is converted to one. That's seen in the
+    // syntax, since rest isn't looked at when x is known to have failed.
+    try <~ ((self as ast, rest as ast) -> inline {
+      t <~ @gensym(t);
+      nil <~ @get['x, 1];
+      void_rest <~ @if[@ast_stringeq(@get[rest, 0], "{}"),
+        @if[@len(rest) == 1, 1 == 1, @get[rest, @len(rest) - 1] == nil],
+        1 == 0];
+      @if[void_rest,
+        '{
+          @bind[`t, `self];
+          @if[(`t):ok(),
+            { @bind[_, (`t).value]; `rest; @typeof(`t).void_union()() },
+            @typeof(`t).void_union().from(`t)]
+        },
+        '{
+          @bind[`t, `self];
+          @if[(`t):ok(), @typeof(`t).from({ @bind[_, (`t).value]; `rest }), `t]
+        }]
+    });
+    // !void, which any ! converts to
+    void_union <~ [] -> type union(void);
+    // x:catch(handler): x's value, or the handler, with the error bound to _
+    catch <~ ((self as ast, handler as ast) -> inline {
+      t <~ @gensym(t);
+      '{
+        @bind[`t, `self];
+        @if[(`t):ok(), (`t).value, { @bind[_, (`t).err]; `handler }]
+      }
+    });
+  };
+  ErrorUnion.impl(R, @struct{});
+  Assign.impl(R, @struct{
+    assign <~ [d as @refT(R), v as any] -> R { put(d, v); d };
+  });
+  // x as !void: x's error, without its value
+  As.impl(R, @struct{
+    to <~ [a as R, U as type] -> any {
+      @if[is_union(U) == (1 == 0), @compileError("a ! converts only to a !void"),
+        @if[U.Value != void, @compileError("a ! converts only to a !void")]];
+      U.from(a)
+    };
+  });
+  Format.impl(R, @struct{
+    format <~ [v as R, w as @refT(any)] -> void
+      @if[v:ok(), fmt_one(w, v.value), fmt_one(w, v.err)];
+  });
+  R
+};
+
+// errdefer stmt: stmt when the scope yields a ! holding an error, with the
+// error bound to _
+failed_of <~ [v as any] -> any {
+  @if[is_union(@typeof(v)) == (1 == 0), @compileError("errdefer needs a scope that yields a !")];
+  v:ok() == (1 == 0)
+};
+errdefer_call <~ [self as ast, s as ast] -> @inlineast()
+  '@defer(@if[(`self).failed(@yield()), { @bind[_, (@yield()).err]; `s }]);
+errdefer <~ @struct{
+  failed <~ failed_of;
+  `'(`@id("()") <~ errdefer_call);
+}();
+
+`'@struct{
+  `@id("!") <~ union;
+  ErrorUnion <~ ErrorUnion;
+  errdefer <~ errdefer;
+}

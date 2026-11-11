@@ -1,0 +1,16 @@
+// filter wraps an iteration in its own type with an Iterator impl; filters chain
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/slice.cshl";
+@using @import @path "lib/iter.cshl";
+i32 <~ @sint();
+xs <- @zero(@arr[6, i32]);
+i <- 0 as @ulong();
+@loop @if[i < 6, { @get[xs, i] = (i as i32) * (3 as i32); i = i + 1; @repeat() }];
+// 0 3 6 9 12 15: the even ones over 5 are 6 and 12
+sum <- 0 as i32;
+for(slice_of(xs))
+  |> filter (_ % (2 as i32)) == (0 as i32)
+  |> filter _ > (5 as i32)
+  |> each { sum = sum + _ };
+sum == (18 as i32)

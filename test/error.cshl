@@ -1,0 +1,41 @@
+// an error's number comes from its name, the same each time; its name comes
+// back from the number, at compile time and when it's written
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/ops.cshl";
+@using @import @path "lib/fmt.cshl";
+@using @import @path "lib/error.cshl";
+u8  <~ @uchar();
+u64 <~ @ulonglong();
+
+not_found <~ error.get "NotFound";
+denied    <~ error.get "Denied";
+again     <~ error.get "NotFound";
+
+// a writer that keeps what's written, to compare
+Buf <~ @struct{
+  w   <- writer();
+  len <- 0 as u64;
+  b   <- @zero(@arr[32, u8]);
+};
+buf_put <~ [self as @refT(writer), p as @ptr(u8), n as u64] -> @void() {
+  s <~ @at(@where(self.ctx) as @ptr(@struct{ len <- 0 as u64; b <- @zero(@arr[32, u8]); }));
+  i <- 0 as u64;
+  @loop @if[i < n, {
+    @get[s.b, s.len] = @get[@at(p as @ptr(@arr[0, u8])), i];
+    s.len = s.len + (1 as u64);
+    i = i + (1 as u64);
+    @repeat()
+  }];
+};
+b <- Buf();
+b.w.put = buf_put;
+// a runtime error_T, so its name is found at runtime
+e <- error_T.init(denied.n);
+fmt(b.w, ["%,%", e, not_found]);
+
+(not_found == again) and (not_found != denied) and (not_found.n != (0 as @uint()))
+  and @ast_stringeq(@id(error.name(denied)), "Denied")
+  and (b.len == (15 as u64))
+  and (@get[b.b, 0] == (@get["D", 0] as u8))
+  and (@get[b.b, 7] == (@get["N", 0] as u8))

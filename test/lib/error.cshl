@@ -1,0 +1,90 @@
+// errors as numbers, with their names kept at compile time:
+//   e <~ error.get "NotFound";   an error_T; the same name, the same number
+//   error.name(e)                 e's name, for an e known at compile time
+//   fmt(w, ["%", e])              writes e's name, at runtime too
+// Numbers start at 1, in the order names are first seen; 0 is no error.
+@using @import @path "bind.cshl";
+@using @import @path "fn.cshl";
+@using @import @path "if.cshl";
+@using @import @path "trait.cshl";
+@using @import @path "types.cshl";
+@using @import @path "ops.cshl";
+@using @import @path "fmt.cshl";
+
+u64 <~ ull;
+
+error_T <~ @struct {
+  n <- ui();
+  init <~ [c as ui]->@this() {
+    r <- @this()();
+    r.n = c;
+    r
+  }
+};
+
+// every name seen, as an id: error n's is names[n - 1]. It grows the way
+// ct_buffer does, in compile-time memory.
+Names <~ @struct{
+  names <- @zero(@ptr(@arr[0, ast]));
+  len   <- 0 as u64;
+  cap   <- 0 as u64;
+};
+registry <~ @at(@alloc[Names]);
+
+// name's number, given one the first time it's seen
+number_of <~ [name as any] -> @comptime(ui) {
+  s <~ registry;
+  // `and` runs both sides, so the name is only read below len
+  i <- 0 as u64;
+  @loop @if[i < s.len, @if[@ast_stringeq(@get[@at(s.names), i], name) == (1 == 0), {
+    i = i + (1 as u64);
+    @repeat()
+  }]];
+  @if[i == s.len, {
+    @if[s.len == s.cap, {
+      n <- @if[s.cap == (0 as u64), 16 as u64, s.cap * (2 as u64)];
+      nb <- @alloc[@arr[n, ast]] as @ptr(@arr[0, ast]);
+      j <- 0 as u64;
+      @loop @if[j < s.len, {
+        @get[@at(nb), j] = @get[@at(s.names), j];
+        j = j + (1 as u64);
+        @repeat()
+      }];
+      s.names = nb;
+      s.cap = n;
+    }];
+    @get[@at(s.names), i] = @id(name);
+    s.len = s.len + (1 as u64);
+  }];
+  (i + (1 as u64)) as ui
+};
+
+// error n's name, as an id; @ast_string of it is the text
+name_id <~ [n as ui] -> @comptime(ast) {
+  @if[(n == (0 as ui)) or ((n as u64) > registry.len), @compileError("no error has this number")];
+  @get[@at(registry.names), (n as u64) - (1 as u64)]
+};
+
+error <~ @struct {
+  // at compile time, so error.name works on what it gives
+  get  <~ [name as any] -> @comptime(error_T) error_T.init(number_of(name));
+  name <~ [e as error_T] -> any @ast_string(name_id(e.n));
+};
+
+// e's name, by comparing with each number known when this is expanded;
+// one seen later is written as its number
+write_name <~ [e as error_T, w as @refT(any), i as any] -> void
+  @if[(i as u64) > registry.len, fmt(w, ["error %", e.n]),
+    @if[e.n == (i as ui), fmt(w, ["%", @ast_string(name_id(i as ui))]),
+      write_name(e, w, i + 1)]];
+
+Format.impl(error_T, @struct{
+  format <~ [e as error_T, w as @refT(any)] -> void write_name(e, w, 1);
+});
+Eq.impl(error_T, @struct{ eq <~ [a as error_T, b as error_T] -> bool a.n == b.n; });
+Ne.impl(error_T, @struct{ ne <~ [a as error_T, b as error_T] -> bool a.n != b.n; });
+
+@struct{
+  error_T <~ error_T;
+  error   <~ error;
+}

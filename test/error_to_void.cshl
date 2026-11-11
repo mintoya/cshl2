@@ -1,0 +1,20 @@
+// any error, or any !, converts to a !void: the error kept, the value dropped
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/types.cshl";
+@using @import @path "lib/ops.cshl";
+@using @import @path "lib/error.cshl";
+@using @import @path "lib/error_union.cshl";
+i32 <~ ii;
+
+bad <~ error.get "Bad";
+failed <~ (!i32).from(bad);
+worked <~ (!i32).from(3 as i32);
+
+a <~ bad as !void;
+b <~ failed as !void;
+c <~ worked as !void;
+d <- (!void)();
+d = failed;
+
+(a.err == bad) and (b.err == bad) and c:ok() and (d.err == bad)

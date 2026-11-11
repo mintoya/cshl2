@@ -92,6 +92,9 @@ const Emitter = struct {
                 var fields: std.ArrayList([]const u8) = .empty;
                 for (members) |m| {
                     if (m.type.decorators.@"comptime") continue;
+                    // a void field has no bytes, and C has no void fields;
+                    // fields are reached by offset, so it can go
+                    if (m.type.raw == .void and m.type.decorators.decor == 0) continue;
                     try fields.append(self.gpa, try self.cType(m.type));
                 }
                 try w.print("struct s_{s} {{", .{name});

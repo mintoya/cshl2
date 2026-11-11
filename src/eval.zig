@@ -69,7 +69,8 @@ const Function = struct {
 
 /// A call argument: its syntax, and its value when the caller already has it
 /// (the receiver of `a:f(x)`).
-const Arg = struct { ast: Ast, value: ?Value = null };
+/// receiver: the value before `:` in a:f(x), already evaluated once
+const Arg = struct { ast: Ast, value: ?Value = null, receiver: bool = false };
 
 /// What a runtime value's bytes are while lowering: the register holding it,
 /// in the function it belongs to. For a place, the register holds a pointer.
@@ -564,7 +565,10 @@ pub const Eval = struct {
 
     fn ownReg(self: *Eval, v: Value, at: Ast) Error!Reg {
         const s = slotOf(v);
-        if (s.func != self.rt.?) return self.fail(at, "a function can't capture a runtime value", .{});
+        // compile-time code (a @struct block, a type function) has no
+        // registers to read it from
+        const rt = self.rt orelse return self.fail(at, "a runtime value can't be used at compile time", .{});
+        if (s.func != rt) return self.fail(at, "a function can't capture a runtime value", .{});
         return s.reg;
     }
 
@@ -675,11 +679,15 @@ pub const Eval = struct {
         try self.emit(.{ .@"if" = try self.toReg(cond, args[0]) });
         self.rt_branch += 1;
         defer self.rt_branch -= 1;
+        // a zero offset first loaded in a branch is only set on that path
+        const saved_zero = self.func().zero;
+        defer self.func().zero = saved_zero;
         const a = try self.eval(args[1], scope);
         const T = try self.typeOf(a.T);
         const result: ?Reg = if (T.raw == .void or args.len == 2) null else try self.newReg(T);
         if (result) |r| try self.emit(.{ .mov = .{ .kind = .VV, .off = try self.offsetReg(0, at), .l = try self.toReg(a, args[1]), .r = r } });
         try self.emit(.@"else");
+        self.func().zero = saved_zero;
         if (args.len == 3) {
             const b_ = try self.eval(args[2], scope);
             if (result) |r| {
@@ -1269,10 +1277,19 @@ pub const Eval = struct {
         {
             const obj = try self.eval(head.call[1], scope);
             f = try self.member(obj, head.call[2], head, true);
-            try args.append(self.gpa, .{ .ast = head.call[1], .value = obj });
+            try args.append(self.gpa, .{ .ast = head.call[1], .value = obj, .receiver = true });
         } else f = try self.eval(head, scope);
         for (items[1..]) |a| try args.append(self.gpa, .{ .ast = a });
         return self.apply(f, args.items, node, scope, false);
+    }
+
+    /// A fresh name for v in scope: x:f(...) with f taking itself as an ast
+    /// gets this, so x isn't evaluated again.
+    fn bindReceiver(self: *Eval, v: Value, scope: *Scope) Error!Ast {
+        self.gensyms += 1;
+        const id: Ast = .{ .id = try self.synth(try std.fmt.allocPrint(self.gpa, "self__{d}", .{self.gensyms})) };
+        try scope.names.put(self.gpa, id.id.gets(), v);
+        return id;
     }
 
     fn evalBlock(self: *Eval, items: []const Ast, scope: *Scope) Error!Value {
@@ -1436,8 +1453,10 @@ pub const Eval = struct {
                     if (!v.T.decorators.@"&") return self.fail(a.ast, "`{s}` isn't a variable", .{name});
                     break :blk v;
                 } else if (p.T.decorators.decor == 0)
-                    // only a bare @ast() takes the syntax, unevaluated
-                    try self.astValue(a.ast)
+                    // only a bare @ast() takes the syntax, unevaluated; the
+                    // receiver was evaluated to find the method, so it's
+                    // that value, bound to a fresh name where it was called
+                    if (a.receiver) try self.astValue(try self.bindReceiver(a.value.?, caller)) else try self.astValue(a.ast)
                 else
                     // a decorated one takes a value like any other type:
                     // @const(@ast()) is an ast, evaluated
