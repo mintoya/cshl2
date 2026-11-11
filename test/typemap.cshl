@@ -1,0 +1,28 @@
+// a compile-time hash map from types to types, past a few growths
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/typemap.cshl";
+type <~ @type();
+
+m <~ typemap();
+put(m, @sint(), @uint());
+put(m, @schar(), @uchar());
+put(m, @ptr(@sint()), @sint());
+// 20 more, so it grows from 8 to 32
+n <- 0;
+@loop @if[n < 20, {
+  put(m, @arr[n, @sint()], @arr[n, @uchar()]);
+  n = n + 1;
+  @repeat()
+}];
+before <~ get(m, @sint());
+put(m, @sint(), @ulong());   // replaces, and get sees it
+
+(before == @uint())
+  and (get(m, @sint()) == @ulong())
+  and (get(m, @schar()) == @uchar())
+  and (get(m, @ptr(@sint())) == @sint())
+  and (get(m, @arr[13, @sint()]) == @arr[13, @uchar()])
+  and has(m, @arr[0, @sint()])
+  and (has(m, @slong()) == (1 == 0))
+  and (get(m, @ptr(@uint())) == @void())

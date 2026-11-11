@@ -104,6 +104,13 @@ pub const Eval = struct {
     /// while lowering: the @loops being lowered, innermost last
     loops: std.ArrayList(LoopCtx) = .empty,
     diag: Diagnostic = .{},
+    /// the innermost expression from a file being evaluated, for the
+    /// positions of the IR it emits; code built by quotes keeps the one
+    /// around it
+    loc: ?SrcRef = null,
+    /// while a macro's expansion runs: the file the macro is written in,
+    /// whose positions don't replace the call site's
+    macro_src: ?*const FileItem = null,
     root: *Scope,
     /// the function being lowered; null while everything runs at compile time
     rt: ?u32 = null,
@@ -469,8 +476,35 @@ pub const Eval = struct {
         return @intCast(f.regs.items.len - 1);
     }
 
+    /// Names the register a runtime binding lives in, for debuggers: a
+    /// place's storage (what its pointer was taken from), or the value's own
+    /// register. The first name a register gets stays.
+    fn nameReg(self: *Eval, name: []const u8, v: Value) Error!void {
+        if (self.rt == null or !self.isRt(v)) return;
+        const slot = slotOf(v);
+        if (slot.func != self.rt.?) return;
+        const f = self.func();
+        var r = slot.reg;
+        if (v.T.decorators.@"&") {
+            var i = f.nodes.items.len;
+            while (i > 0) {
+                i -= 1;
+                switch (f.nodes.items[i]) {
+                    .ldp => |p| if (p.d == r) {
+                        r = p.l;
+                        break;
+                    },
+                    else => {},
+                }
+            }
+        }
+        const gop = try f.reg_names.getOrPut(self.gpa, r);
+        if (!gop.found_existing) gop.value_ptr.* = name;
+    }
+
     fn emit(self: *Eval, n: ir.node) Error!void {
         try self.func().nodes.append(self.gpa, n);
+        try self.func().locs.append(self.gpa, self.loc);
     }
 
     fn regType(self: *Eval, r: Reg) Type {
@@ -683,6 +717,7 @@ pub const Eval = struct {
         const ctx = self.loops.pop().?;
         if (!ctx.runtime) {
             _ = self.func().nodes.orderedRemove(start);
+            _ = self.func().locs.orderedRemove(start);
             var val = v;
             while (self.repeat) {
                 self.repeat = false;
@@ -733,13 +768,21 @@ pub const Eval = struct {
         return if (self.isRt(x) and x.T.decorators.@"&") pv else self.use(pv, at);
     }
 
+    /// A result type made @comptime: the function runs at compile time. Types
+    /// that are always compile-time (@type(), @any(), @ast() ...) don't count.
+    fn comptimeResult(T: Type) bool {
+        return T.decorators.@"comptime" and !mk(T.raw).decorators.@"comptime";
+    }
+
     /// Whether calling f lowers a call to a C function: when every parameter
-    /// and the result are runtime types. Anything else that takes compile-time
-    /// things is inlined where it's called.
-    fn isRuntimeFn(f: Function) bool {
-        for (f.params) |p| if (!isRuntimeType(p.T)) return false;
+    /// and the result can exist at runtime, all the way through. Anything
+    /// else that takes compile-time things is inlined where it's called; a
+    /// @comptime result runs at compile time.
+    fn isRuntimeFn(self: *Eval, f: Function) Error!bool {
+        if (comptimeResult(f.ret)) return false;
+        for (f.params) |p| if (!isRuntimeType(p.T) or !try self.holdsRuntime(p.T)) return false;
         const void_ret = f.ret.raw == .void and f.ret.decorators.decor == 0;
-        if (!void_ret and !isRuntimeType(f.ret)) return false;
+        if (!void_ret and (!isRuntimeType(f.ret) or !try self.holdsRuntime(f.ret))) return false;
         return f.params.len != 0 or !void_ret;
     }
 
@@ -765,6 +808,7 @@ pub const Eval = struct {
             try self.emit(.{ .arg = .{ .idx = @intCast(i), .d = r } });
             try self.func().params.append(self.gpa, r);
             try sc.names.put(self.gpa, p.name, try self.rtValue(p.T, r));
+            try self.func().reg_names.put(self.gpa, r, p.name);
         }
         const result = try self.evalIn(&.{f.body}, sc);
         if (f.ret.raw != .void or self.isPtr(f.ret)) {
@@ -1044,7 +1088,7 @@ pub const Eval = struct {
         } else true;
         if (!same) return self.fail(at, "{f} doesn't have the signature of {f}", .{ self.typeName(value.T), self.typeName(T) });
         if (self.rt != null) {
-            if (!isRuntimeFn(self.fns.items[handle])) return self.fail(at, "only a function over runtime types has a pointer", .{});
+            if (!try self.isRuntimeFn(self.fns.items[handle])) return self.fail(at, "only a function over runtime types has a pointer", .{});
             const idx = try self.lowerFn(handle, at);
             const r = try self.newReg(target);
             try self.emit(.{ .rom = .{ .d = r, .off = try self.module.addFuncAddr(self.gpa, idx) } });
@@ -1074,6 +1118,11 @@ pub const Eval = struct {
     // -------------------------------------------------------------- evaluate
 
     pub fn eval(self: *Eval, node: Ast, scope: *Scope) Error!Value {
+        const saved = self.loc;
+        defer self.loc = saved;
+        if (node == .call) if (firstRef(node)) |r| if (r.src.* == .disk and r.src != self.macro_src) {
+            self.loc = r;
+        };
         return switch (node) {
             .nil => self.voidValue(),
             .num => |r| self.intLiteral(r.gets(), node),
@@ -1339,7 +1388,7 @@ pub const Eval = struct {
             return self.fail(at, "expected {d} argument(s), found {d}", .{ f.params.len, args.len });
         // while lowering, a function over runtime types is a call to a C
         // function; any other function runs here, inlining what it lowers
-        if (self.rt != null and isRuntimeFn(f)) return self.callLowered(handle, args, at, caller);
+        if (self.rt != null and try self.isRuntimeFn(f)) return self.callLowered(handle, args, at, caller);
         const sc = try self.gpa.create(Scope);
         sc.* = .{ .parent = f.closure, .ret = f.ret };
         for (f.params, args) |param, a| {
@@ -1374,7 +1423,12 @@ pub const Eval = struct {
         const ret = if (f.ret_ast) |t| try self.typeArg(t, sc) else f.ret;
         sc.ret = ret;
         var key: ?[]const u8 = null;
-        if (ret.raw == .type and !self.isPtr(ret)) {
+        // a type result is interned by the arguments, unless it's
+        // @volatile(@type()): one that can change, like a lookup; that still
+        // runs at compile time
+        const volatile_type = ret.raw == .type and !self.isPtr(ret) and
+            std.mem.indexOfScalar(Decor, self.chain(ret), .@"volatile") != null;
+        if (ret.raw == .type and !self.isPtr(ret) and !volatile_type) {
             var bytes: std.ArrayList(u8) = .empty;
             try bytes.appendSlice(self.gpa, std.mem.asBytes(&handle));
             for (sc.names.values()) |entry| {
@@ -1386,8 +1440,12 @@ pub const Eval = struct {
             if (self.type_calls.get(bytes.items)) |v| return v;
             key = bytes.items;
         }
-        // a function giving a type runs at compile time
-        const result = if (key != null) try self.atCompileTime(evalIn, .{ self, &.{f.body}, sc }) else try self.evalIn(&.{f.body}, sc);
+        // a function giving a type, or a @comptime(T), runs at compile time
+        // a body building syntax runs at compile time too; what it builds
+        // runs where it's used
+        const builds_syntax = (ret.raw == .ast or ret.raw == .inlineast) and !self.isPtr(ret);
+        const at_ct = key != null or volatile_type or builds_syntax or comptimeResult(ret);
+        const result = if (at_ct) try self.atCompileTime(evalIn, .{ self, &.{f.body}, sc }) else try self.evalIn(&.{f.body}, sc);
         if (key) |k| {
             const v = try self.convert(result, ret, f.body);
             try self.type_calls.put(self.gpa, k, v);
@@ -1398,6 +1456,11 @@ pub const Eval = struct {
             .inlineast => {
                 const code = try self.asAst(result, f.body);
                 if (outline) return self.astValue(code);
+                // the expansion is at the call site, except what the caller
+                // wrote into it
+                const saved = self.macro_src;
+                defer self.macro_src = saved;
+                if (firstRef(f.body)) |r| self.macro_src = r.src;
                 return self.eval(code, caller);
             },
             .any, .ast => result,
@@ -1719,6 +1782,15 @@ pub const Eval = struct {
                 };
                 return self.boolValue(text != null and std.mem.eql(u8, text.?, s), true);
             },
+            // the text of an ast: an atom's own text, a call as (f a b)
+            .ast_string => {
+                try self.arity(args, 1, b, at);
+                const a = try self.asAst(try self.eval(args[0], scope), args[0]);
+                return switch (a) {
+                    .id, .num, .str => |r| self.stringValue(r.gets()),
+                    else => self.stringValue(try std.fmt.allocPrint(self.gpa, "{f}", .{a})),
+                };
+            },
             .gensym => {
                 if (args.len > 1) return self.fail(at, "@gensym takes at most 1 argument", .{});
                 const prefix = if (args.len == 1) headText(args[0]) orelse return self.fail(args[0], "@gensym's prefix is a bare name", .{}) else "g";
@@ -1737,7 +1809,8 @@ pub const Eval = struct {
             .compiles => {
                 try self.arity(args, 1, b, at);
                 const saved = self.diag;
-                const ok = if (self.eval(args[0], scope)) |_| true else |e| switch (e) {
+                // whether it works; what it lowers is dropped either way
+                const ok = if (self.evalForType(args[0], scope)) |_| true else |e| switch (e) {
                     error.CompileError => false,
                     else => return e,
                 };
@@ -1749,13 +1822,6 @@ pub const Eval = struct {
                 const v = try self.eval(args[0], scope);
                 std.debug.print("{f}: {f}\n", .{ self.fmtValue(v), self.typeName(v.T) });
                 return v;
-            },
-            .raw => {
-                try self.arity(args, 1, b, at);
-                const sc = try self.gpa.create(Scope);
-                sc.* = .{ .parent = scope };
-                for (self.root.names.keys(), self.root.names.values()) |k, v| try sc.names.put(self.gpa, k, v);
-                return self.eval(args[0], sc);
             },
             .outlineast => {
                 try self.arity(args, 1, b, at);
@@ -1770,7 +1836,11 @@ pub const Eval = struct {
             // reflection and layout
             .typeof => {
                 try self.arity(args, 1, b, at);
-                return self.typeValue(try self.typeOf((try self.evalForType(args[0], scope)).T));
+                // the type a variable would take: a value known at compile time
+                // doesn't make it @comptime, unless it always is (@int() ...)
+                var T = try self.typeOf((try self.evalForType(args[0], scope)).T);
+                T.decorators.@"comptime" = mk(T.raw).decorators.@"comptime";
+                return self.typeValue(T);
             },
             .sizeof, .alignof => {
                 try self.arity(args, 1, b, at);
@@ -1867,6 +1937,7 @@ pub const Eval = struct {
                 const name = headText(args[0]) orelse return self.fail(args[0], "@bind needs a name", .{});
                 const v = try self.eval(args[1], scope);
                 try self.bindNew(scope, name, v, args[0]);
+                try self.nameReg(name, v);
                 return v;
             },
             .unbind => {
@@ -2014,8 +2085,14 @@ pub const Eval = struct {
         const f = self.func();
         const n = f.nodes.items.len;
         const saved_zero = f.zero;
-        const v = try self.eval(x, scope);
+        const v = self.eval(x, scope) catch |e| {
+            self.func().nodes.shrinkRetainingCapacity(n);
+            self.func().locs.shrinkRetainingCapacity(n);
+            self.func().zero = saved_zero;
+            return e;
+        };
         self.func().nodes.shrinkRetainingCapacity(n);
+        self.func().locs.shrinkRetainingCapacity(n);
         self.func().zero = saved_zero;
         return v;
     }

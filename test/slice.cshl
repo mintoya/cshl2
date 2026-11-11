@@ -3,6 +3,7 @@
 @using @import @path "lib/fn.cshl";
 @using @import @path "lib/slice.cshl";
 @using @import @path "lib/iter.cshl";
+@using @import @path "lib/types.cshl";
 i32 <~ @sint();
 u64 <~ @ulonglong();
 

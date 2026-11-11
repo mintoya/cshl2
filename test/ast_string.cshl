@@ -1,0 +1,24 @@
+// error: no impl for (@ptr (@sint))
+// @ast_string gives an ast's text: an atom's own, a call as (f a b); with
+// @compileError taking any string, messages can name what was written
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+u8 <~ @uchar();
+any <~ @any();
+
+// a and b joined, in fresh compile-time storage
+join <~ [a as any, b as any] -> any {
+  s <~ @at(@alloc[@arr[@len(a) + @len(b), u8]]);
+  i <- 0;
+  @loop @if[i < @len(a), { @get[s, i] = @get[a, i]; i = i + 1; @repeat() }];
+  i = 0;
+  @loop @if[i < @len(b), { @get[s, @len(a) + i] = @get[b, i]; i = i + 1; @repeat() }];
+  s
+};
+
+@if[@ast_stringeq('x, @ast_string('x)) == (1 == 0), @compileError("atom")];
+
+// T arrives as the syntax the caller wrote
+needs_impl <~ [T as @ast()] -> @void()
+  @compileError(join("no impl for ", @ast_string(T)));
+needs_impl(@ptr(@sint()))

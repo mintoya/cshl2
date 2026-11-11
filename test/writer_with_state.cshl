@@ -1,0 +1,27 @@
+// compiled only
+// a writer's own state follows its header; put reaches it through ctx, the
+// way an allocator embeds its context
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/fmt.cshl";
+u8 <~ @uchar();
+u64 <~ @ulonglong();
+
+// counts what's written, and keeps the last byte
+State <~ @struct{
+  count <- 0 as u64;
+  last  <- 0 as u8;
+};
+Counting <~ @struct{
+  w <- writer();
+  s <- State();
+};
+counting_put <~ [self as @refT(writer), p as @ptr(u8), n as u64] -> @void() {
+  s <~ @at(@where(self.ctx) as @ptr(State));
+  s.count = s.count + n;
+  s.last = @get[@at(p as @ptr(@arr[0, u8])), n - (1 as u64)];
+};
+c <- Counting();
+c.w.put = counting_put;
+fmt(c.w, ["% and %!", 12, "ab"]);
+(c.s.count == (10 as u64)) and (c.s.last == (@get["!", 0] as u8))

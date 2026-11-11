@@ -10,6 +10,7 @@ const Type = types.Type;
 const TypeIdx = types.TypeIdx;
 const Decor = types.Decor;
 const Reg = mod.Reg;
+const SrcRef = @import("ast.zig").SrcRef;
 
 pub const Error = error{ OutOfMemory, WriteFailed, Unsupported, CompileError };
 
@@ -21,6 +22,10 @@ const Emitter = struct {
     count: u32 = 0,
     /// what Unsupported was about
     why: []const u8 = "",
+    /// the cshl names of the current function's registers
+    reg_names: ?*const std.AutoHashMapUnmanaged(Reg, []const u8) = null,
+    /// each source file's line start offsets, by its FileItem's address
+    line_starts: std.AutoHashMapUnmanaged(usize, []const u32) = .empty,
 
     fn key(T: Type) u64 {
         var t = T;
@@ -136,8 +141,31 @@ const Emitter = struct {
         return key(a) == key(b);
     }
 
+    /// A register in C: rN, or for one bound to a name, the name made a C
+    /// identifier with N after it. A name can be any bytes, so bytes outside
+    /// [A-Za-z0-9_] are written _xHH, and a name not starting with a letter
+    /// or _ gets v_ in front; N keeps them apart and off C's keywords.
+    const RegName = struct {
+        name: ?[]const u8,
+        r: Reg,
+        pub fn format(self: RegName, w: *std.Io.Writer) std.Io.Writer.Error!void {
+            const name = self.name orelse return w.print("r{d}", .{self.r});
+            if (name.len == 0 or !(std.ascii.isAlphabetic(name[0]) or name[0] == '_')) try w.writeAll("v_");
+            for (name) |c| {
+                if (std.ascii.isAlphanumeric(c) or c == '_') try w.writeByte(c) else try w.print("_x{x:0>2}", .{c});
+            }
+            try w.print("_{d}", .{self.r});
+        }
+    };
+
+    fn reg(self: *const Emitter, r: Reg) RegName {
+        return .{ .name = if (self.reg_names) |n| n.get(r) else null, .r = r };
+    }
+
     fn function(self: *Emitter, w: *std.Io.Writer, idx: u32, f: *const mod.Func) Error!void {
         const regs = f.regs.items;
+        self.reg_names = &f.reg_names;
+        defer self.reg_names = null;
         const ret = if (f.result) |r| try self.cType(regs[r]) else "void";
         try w.print("static {s} f{d}(", .{ ret, idx });
         if (f.params.items.len == 0) try w.writeAll("void");
@@ -145,46 +173,79 @@ const Emitter = struct {
         try w.writeAll(") {\n");
         for (regs, 0..) |T, i| {
             if (self.isVoid(T)) continue;
-            try w.print("  {s} r{d};\n", .{ try self.cType(try self.declType(T)), i });
+            try w.print("  {s} {f};\n", .{ try self.cType(try self.declType(T)), self.reg(@intCast(i)) });
         }
-        for (f.nodes.items) |n| try self.node(w, regs, n);
-        if (f.result) |r| try w.print("  return r{d};\n", .{r});
+        for (f.nodes.items, f.locs.items) |n, loc| {
+            if (loc) |l| try self.line(w, l);
+            try self.node(w, regs, n);
+        }
+        if (f.result) |r| try w.print("  return {f};\n", .{ self.reg(r) });
         try w.writeAll("}\n");
+    }
+
+    /// `#line N "file"` before the C for a node: debuggers then step, break
+    /// and backtrace by the .cshl file. It's written before every node, since
+    /// the lines after a #line count up from it.
+    fn line(self: *Emitter, w: *std.Io.Writer, loc: SrcRef) Error!void {
+        const d = loc.src.disk;
+        const content = d.content;
+        const gop = try self.line_starts.getOrPut(self.gpa, @intFromPtr(loc.src));
+        if (!gop.found_existing) {
+            var starts: std.ArrayList(u32) = .empty;
+            try starts.append(self.gpa, 0);
+            for (content, 0..) |c, i| if (c == '\n') try starts.append(self.gpa, @intCast(i + 1));
+            gop.value_ptr.* = starts.items;
+        }
+        const starts = gop.value_ptr.*;
+        // the last line start at or before off
+        var lo: usize = 0;
+        var hi: usize = starts.len;
+        while (hi - lo > 1) {
+            const mid = (lo + hi) / 2;
+            if (starts[mid] <= loc.off) lo = mid else hi = mid;
+        }
+        const n: u32 = @intCast(lo + 1);
+        try w.print("#line {d} \"", .{n});
+        for (d.filename) |c| switch (c) {
+            '"', '\\' => try w.print("\\{c}", .{c}),
+            else => try w.writeByte(c),
+        };
+        try w.writeAll("\"\n");
     }
 
     fn node(self: *Emitter, w: *std.Io.Writer, regs: []const Type, n: ir.node) Error!void {
         const e = self.e;
         switch (n) {
             .mov => |m| switch (m.kind) {
-                .VV => if (!self.isVoid(regs[m.r])) try w.print("  r{d} = r{d};\n", .{ m.r, m.l }),
+                .VV => if (!self.isVoid(regs[m.r])) try w.print("  {f} = {f};\n", .{ self.reg(m.r), self.reg(m.l) }),
                 // the register types say which side is the pointer
                 .VP => {
                     const l = regs[m.l];
                     if (e.isPtr(l) and sameType(try e.pointeePub(l), regs[m.r]))
-                        try w.print("  r{d} = *({s} *)((char *)r{d} + r{d});\n", .{ m.r, try self.cType(regs[m.r]), m.l, m.off })
+                        try w.print("  {f} = *({s} *)((char *){f} + {f});\n", .{ self.reg(m.r), try self.cType(regs[m.r]), self.reg(m.l), self.reg(m.off) })
                     else
-                        try w.print("  *({s} *)((char *)r{d} + r{d}) = r{d};\n", .{ try self.cType(regs[m.l]), m.r, m.off, m.l });
+                        try w.print("  *({s} *)((char *){f} + {f}) = {f};\n", .{ try self.cType(regs[m.l]), self.reg(m.r), self.reg(m.off), self.reg(m.l) });
                 },
-                .PP => try w.print("  memcpy((char *)r{d} + r{d}, (char *)r{d} + r{d}, sizeof *r{d});\n", .{ m.r, m.off, m.l, m.off, m.r }),
+                .PP => try w.print("  memcpy((char *){f} + {f}, (char *){f} + {f}, sizeof *{f});\n", .{ self.reg(m.r), self.reg(m.off), self.reg(m.l), self.reg(m.off), self.reg(m.r) }),
             },
             .rom => |r| {
                 if (self.e.module.func_addrs.get(r.off)) |f|
-                    try w.print("  r{d} = ({s})&f{d};\n", .{ r.d, try self.cType(regs[r.d]), f })
+                    try w.print("  {f} = ({s})&f{d};\n", .{ self.reg(r.d), try self.cType(regs[r.d]), f })
                 else if (!self.isVoid(regs[r.d]))
-                    try w.print("  memcpy(&r{d}, cshl_rom + {d}, sizeof r{d});\n", .{ r.d, r.off, r.d });
+                    try w.print("  memcpy(&{f}, cshl_rom + {d}, sizeof {f});\n", .{ self.reg(r.d), r.off, self.reg(r.d) });
             },
             .math => |m| try self.math(w, regs, m.op, m.l, m.r, m.d),
-            .cast => |c| try w.print("  r{d} = ({s})r{d};\n", .{ c.d, try self.cType(regs[c.d]), c.l }),
+            .cast => |c| try w.print("  {f} = ({s}){f};\n", .{ self.reg(c.d), try self.cType(regs[c.d]), self.reg(c.l) }),
             .call => |c| {
                 try w.writeAll("  ");
-                if (!self.isVoid(regs[c.d])) try w.print("r{d} = ", .{c.d});
-                try w.print("r{d}(", .{c.@"fn"});
-                for (c.args, 0..) |a, i| try w.print("{s}r{d}", .{ if (i == 0) "" else ", ", a });
+                if (!self.isVoid(regs[c.d])) try w.print("{f} = ", .{ self.reg(c.d) });
+                try w.print("{f}(", .{ self.reg(c.@"fn") });
+                for (c.args, 0..) |a, i| try w.print("{s}{f}", .{ if (i == 0) "" else ", ", self.reg(a) });
                 try w.writeAll(");\n");
             },
-            .arg => |a| try w.print("  r{d} = a{d};\n", .{ a.d, a.idx }),
-            .ldp => |p| try w.print("  r{d} = &r{d};\n", .{ p.d, p.l }),
-            .@"if" => |c| try w.print("  if (r{d}) {{\n", .{c}),
+            .arg => |a| try w.print("  {f} = a{d};\n", .{ self.reg(a.d), a.idx }),
+            .ldp => |p| try w.print("  {f} = &{f};\n", .{ self.reg(p.d), self.reg(p.l) }),
+            .@"if" => |c| try w.print("  if ({f}) {{\n", .{ self.reg(c) }),
             .@"else" => try w.writeAll("  } else {\n"),
             .endif => try w.writeAll("  }\n"),
             .loop => try w.writeAll("  for (;;) {\n"),
@@ -193,29 +254,29 @@ const Emitter = struct {
             .cexpr => |c| if (self.isVoid(regs[c.d]))
                 try w.print("  {s};\n", .{c.text})
             else
-                try w.print("  r{d} = ({s});\n", .{ c.d, c.text }),
+                try w.print("  {f} = ({s});\n", .{ self.reg(c.d), c.text }),
         }
     }
 
     fn math(self: *Emitter, w: *std.Io.Writer, regs: []const Type, op: ir.node.mathKind, l: Reg, r: Reg, d: Reg) Error!void {
         const T = try self.cType(regs[d]);
         if (self.e.isPtr(regs[d])) return switch (op) {
-            .ADD => w.print("  r{d} = ({s})((char *)r{d} + r{d});\n", .{ d, T, l, r }),
-            .SUB => w.print("  r{d} = ({s})((char *)r{d} - r{d});\n", .{ d, T, l, r }),
+            .ADD => w.print("  {f} = ({s})((char *){f} + {f});\n", .{ self.reg(d), T, self.reg(l), self.reg(r) }),
+            .SUB => w.print("  {f} = ({s})((char *){f} - {f});\n", .{ self.reg(d), T, self.reg(l), self.reg(r) }),
             else => self.unsupported("pointer {s}", .{@tagName(op)}),
         };
         const sym: []const u8 = switch (op) {
             // wrap, as the evaluator does; signed overflow isn't defined in C
-            .ADD, .SUB, .MUL => return w.print("  r{d} = ({s})((unsigned long long)r{d} {s} (unsigned long long)r{d});\n", .{ d, T, l, switch (op) {
+            .ADD, .SUB, .MUL => return w.print("  {f} = ({s})((unsigned long long){f} {s} (unsigned long long){f});\n", .{ self.reg(d), T, self.reg(l), switch (op) {
                 .ADD => "+",
                 .SUB => "-",
                 else => "*",
-            }, r }),
-            .CMP => return w.print("  r{d} = (r{d} > r{d}) - (r{d} < r{d});\n", .{ d, l, r, l, r }),
+            }, self.reg(r) }),
+            .CMP => return w.print("  {f} = ({f} > {f}) - ({f} < {f});\n", .{ self.reg(d), self.reg(l), self.reg(r), self.reg(l), self.reg(r) }),
             // a negative count shifts the other way; past the width it's 0
             .SHL, .SHR => return w.print(
-                "  {{ long long n = {s}(long long)r{d}; r{d} = (n >= (long long)(8 * sizeof r{d}) || -n >= (long long)(8 * sizeof r{d})) ? 0 : n >= 0 ? ({s})((unsigned long long)r{d} << n) : ({s})(r{d} >> -n); }}\n",
-                .{ if (op == .SHR) "-" else "", r, d, d, d, T, l, T, l },
+                "  {{ long long n = {s}(long long){f}; {f} = (n >= (long long)(8 * sizeof {f}) || -n >= (long long)(8 * sizeof {f})) ? 0 : n >= 0 ? ({s})((unsigned long long){f} << n) : ({s})({f} >> -n); }}\n",
+                .{ if (op == .SHR) "-" else "", self.reg(r), self.reg(d), self.reg(d), self.reg(d), T, self.reg(l), T, self.reg(l) },
             ),
             .DIV => "/",
             .MOD => "%",
@@ -232,7 +293,7 @@ const Emitter = struct {
             .BOR => "|",
             .BXOR => "^",
         };
-        try w.print("  r{d} = r{d} {s} r{d};\n", .{ d, l, sym, r });
+        try w.print("  {f} = {f} {s} {f};\n", .{ self.reg(d), self.reg(l), sym, self.reg(r) });
     }
 };
 

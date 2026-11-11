@@ -1,0 +1,95 @@
+// a compile-time hash map from types to types: two arrays, keys and values,
+// with linear probing. A type is hashed as its bytes. Storage comes from
+// @alloc; an empty slot's value is @void(), which is what fresh @alloc memory
+// holds, and never a value put here.
+//   m <~ typemap();      a new map: a pointer to its state
+//   put(m, K, V)  get(m, K) (@void() when absent)  has(m, K)
+// Every function returns a @comptime type, so it runs at compile time even
+// while the program is being lowered.
+@using @import @path "bind.cshl";
+@using @import @path "fn.cshl";
+
+type  <~ @type();
+u64   <~ @ulonglong();
+types <~ @ptr(@arr[0, type]);
+ct    <~ [T as type] -> type @comptime(T);
+
+State <~ @struct{
+  keys <- @zero(types);
+  vals <- @zero(types);
+  cap  <- 0 as u64;   // a power of two, or 0
+  len  <- 0 as u64;
+};
+
+typemap <~ [] -> ct(@ptr(State)) @alloc[State];
+
+// FNV-1a over the type's bytes, however many there are, to a slot of cap
+hash <~ [k as type, cap as u64] -> ct(u64) {
+  bytes <~ (@where k) as @ptr(@arr[0, @uchar()]);
+  h <- 0xcbf29ce484222325 as u64;
+  i <- 0 as u64;
+  @loop @if[i < (@sizeof(type) as u64), {
+    h = (h bxor (@get[@at(bytes), i] as u64)) * (0x100000001b3 as u64);
+    i = i + (1 as u64);
+    @repeat()
+  }];
+  h band (cap - (1 as u64))
+};
+
+// k's slot: where it is, or the empty one it would go in
+slot <~ [m as @ptr(State), k as type] -> ct(u64) {
+  s <~ @at(m);
+  i <- hash(k, s.cap);
+  @loop @if[(@get[@at(s.vals), i] != @void()) and (@get[@at(s.keys), i] != k), {
+    i = (i + (1 as u64)) band (s.cap - (1 as u64));
+    @repeat()
+  }];
+  i
+};
+
+// doubles the arrays, at least 8, and puts everything back
+grow <~ [m as @ptr(State)] -> ct(@void()) {
+  s <~ @at(m);
+  keys <- s.keys;
+  vals <- s.vals;
+  old  <- s.cap;
+  n <- @if[old == (0 as u64), 8 as u64, old * (2 as u64)];
+  s.keys = @alloc[@arr[n, type]] as types;
+  s.vals = @alloc[@arr[n, type]] as types;
+  s.cap = n;
+  i <- 0 as u64;
+  @loop @if[i < old, {
+    @if[@get[@at(vals), i] != @void(), {
+      j <- slot(m, @get[@at(keys), i]);
+      @get[@at(s.keys), j] = @get[@at(keys), i];
+      @get[@at(s.vals), j] = @get[@at(vals), i];
+    }];
+    i = i + (1 as u64);
+    @repeat()
+  }];
+};
+
+put <~ [m as @ptr(State), k as type, v as type] -> ct(@void()) {
+  s <~ @at(m);
+  // at most 3/4 full
+  @if[((s.len + (1 as u64)) * (4 as u64)) > (s.cap * (3 as u64)), grow(m)];
+  i <- slot(m, k);
+  @if[@get[@at(s.vals), i] == @void(), s.len = s.len + (1 as u64)];
+  @get[@at(s.keys), i] = k;
+  @get[@at(s.vals), i] = v;
+};
+
+// @volatile: a lookup isn't interned, since the map changes
+get <~ [m as @ptr(State), k as type] -> @volatile(type) {
+  s <~ @at(m);
+  @if[s.cap == (0 as u64), @void(), @get[@at(s.vals), slot(m, k)]]
+};
+
+has <~ [m as @ptr(State), k as type] -> ct(@bool()) get(m, k) != @void();
+
+@struct{
+  typemap <~ typemap;
+  put <~ put;
+  get <~ get;
+  has <~ has;
+}

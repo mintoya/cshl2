@@ -2,15 +2,10 @@
 @using @import @path "fn.cshl";
 @using @import @path "if.cshl";
 @using @import @path "slice.cshl";
-type  <~ @type();
-u64   <~ @ulonglong() as type;
-u8    <~ @uchar()     as type;
-i8    <~ @schar()     as type;
-void  <~ @void()      as type;
-any   <~ @any()       as type;
+@using @import @path "types.cshl";
 
 allocator <~ @struct{
-  allocatorType <~ @fnptr[[@refT@this(),@ptr(u8),u64,u64],@ptr(u8)];
+  allocatorType <~ @fnptr[[@refT@this(),@ptr(uc),ull,ull],@ptr(uc)];
   fn <- allocatorType();
   Self <~ @this();
   RSelf<~ @refT(Self);
@@ -18,11 +13,11 @@ allocator <~ @struct{
   resize <~ [
     self  as RSelf,
     value as any,
-    count as u64,
+    count as ull,
   ]->@typeof(value) {
     result <- value;
     result.ptr = self:fn(
-      result.ptr as @ptr(u8),
+      result.ptr as @ptr(uc),
       result.len,
       count
     ) as @typeof(result.ptr);
@@ -32,46 +27,43 @@ allocator <~ @struct{
   alloc <~ ([
     self  as RSelf,
     t     as type,
-    count as u64
+    count as ull
   ]->slice(t) 
     self:resize(@returntype()(),count));
   free <~ ([
     self  as RSelf,
     value as any,
   ]->void 
-    self:resize(value,0 as u64));
+    self:resize(value,0 as ull));
   // must be at end obviously
-  ctx <- @arr[0,u64]();
+  ctx <- @arr[0,ull]();
 };
 
 @cinclude "stdlib.h";
 
 c_runtime_allocator <- { 
-  allocator() |> {
-    tmp <- _;
-    tmp.fn = ([
-      _unused as @refT(allocator),
-      mem as @ptr(u8),
-      from as u64,
-      to as u64,
-    ] -> @ptr(u8) 
-      @cexpr[@typeof(@returntype()()),"realloc(a1,a3)"]
-    );
-    tmp
-  }
+  tmp <- allocator();
+  tmp.fn = ([
+    _unused as @refT(allocator),
+    mem     as @ptr(uc),
+    from    as ull,
+    to      as ull,
+  ] -> @ptr(uc) 
+    @cexpr[@typeof(@returntype()()),"realloc(a1,a3)"]);
+  tmp
 };
 
-xs <- c_runtime_allocator:alloc(u8,6);
-@defer c_runtime_allocator:free(xs);
+// xs <- c_runtime_allocator:alloc(uc,5);
+// @defer c_runtime_allocator:free(xs);
+// xs = c_runtime_allocator:resize(xs,6);
+// 
+// xs:get[0] = @get["h",0];
+// xs:get[1] = @get["f",0];
+// xs:get[2] = @get["l",0];
+// xs:get[3] = @get["l",0];
+// xs:get[4] = @get["o",0];
+// xs:get[5] = 0 as i8;
 
-xs:get[0] = @get["h",0];
-xs:get[1] = @get["3",0];
-xs:get[2] = @get["l",0];
-xs:get[3] = @get["l",0];
-xs:get[4] = @get["o",0];
-xs:get[5] = 0 as i8;
-
-@cinclude "stdio.h";
-([a0 as @ptr(u8)]->void 
-  @cexpr[void,"puts((char*)a0)"])
-|> _(xs.ptr);
+@struct{
+  c_runtime_allocator <~ c_runtime_allocator;
+}

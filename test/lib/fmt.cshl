@@ -1,0 +1,207 @@
+// formatting, through writers that work the way allocators do: a writer is a
+// header, `put`, called with the bytes to write, and whatever the writer
+// keeps lives in memory after it, from `ctx`. A writer's `put` reaches it
+// from the header it's given.
+//   fmt(w, ["x is %, /% is a percent\n", x])
+// writes the format with each % replaced by the next argument; / writes the
+// character after it as it is. An argument is a string, or a value whose type
+// has a Format impl, with format(v, w); the integer types and @bool() have one.
+// The format is walked at compile time, so only the writes are left.
+//   print(["...", args...])   fmt to stdout
+// A compile-time buffer, ct_buffer, is a writer too; with @compileError it
+// gives formatted errors. It's written at compile time, so it's used from a
+// function that runs then, one returning @comptime(...):
+//   b <~ @at(@alloc[ct_buffer]);  fmt(b, [...]);  @compileError(b:text())
+@using @import @path "bind.cshl";
+@using @import @path "fn.cshl";
+@using @import @path "trait.cshl";
+
+u8   <~ @uchar();
+u64  <~ @ulonglong();
+void <~ @void();
+any  <~ @any();
+
+// v, a C integer, in decimal, a byte at a time, the most significant first
+fmt_cint <~ [w as @refT(@any()), v as any] -> void {
+  T <~ @typeof(v);
+  neg <- v < (0 as T);
+  // the magnitude as a u64, which holds the smallest i64's too
+  m <- @if[neg, (((0 as T) - (v + (1 as T))) as u64) + (1 as u64), v as u64];
+  p <- 1 as u64;
+  @loop @if[(m / p) >= (10 as u64), { p = p * (10 as u64); @repeat() }];
+  @if[neg, w:byte(@get["-", 0] as u8)];
+  @loop {
+    w:byte((((m / p) % (10 as u64)) as u8) + (@get["0", 0] as u8));
+    p = p / (10 as u64);
+    @if[p > (0 as u64), @repeat()];
+  };
+};
+// v in decimal; a compile-time integer is made a C one first
+fmt_int <~ [w as @refT(@any()), v as any] -> void
+  @if[@typeof(v) == @int(),
+    @if[v < 0, fmt_cint(w, v as @slonglong()), fmt_cint(w, v as u64)],
+    fmt_cint(w, v)];
+
+// a writer: put writes n bytes from p; the writer's own state follows ctx
+writer <~ @struct{
+  putType <~ @fnptr[[@refT@this(), @ptr(u8), u64], @void()];
+  put <- putType();
+  Self <~ @this();
+
+  // bytes a to b of the char array s
+  part <~ [self as @refT(Self), s as any, a as u64, b as u64] -> void {
+    t <- s;
+    self:put(@where(@get[t, a]) as @ptr(u8), b - a);
+  };
+  byte <~ [self as @refT(Self), c as u8] -> void {
+    t <- c;
+    self:put(@where(t), 1 as u64);
+  };
+  // must be at the end
+  ctx <- @arr[0, u64]();
+};
+
+// a writer into compile-time memory, for messages built at compile time;
+// all of it runs at compile time
+ct_buffer <~ @struct{
+  Self <~ @this();
+  buf <- @zero(@ptr(@arr[0, u8]));
+  len <- 0 as u64;
+  cap <- 0 as u64;
+
+  byte <~ [self as @refT(Self), c as u8] -> @comptime(void) {
+    @if[self.len == self.cap, {
+      n <- @if[self.cap == (0 as u64), 32 as u64, self.cap * (2 as u64)];
+      nb <- @alloc[@arr[n, u8]] as @ptr(@arr[0, u8]);
+      i <- 0 as u64;
+      @loop @if[i < self.len, {
+        @get[@at(nb), i] = @get[@at(self.buf), i];
+        i = i + (1 as u64);
+        @repeat()
+      }];
+      self.buf = nb;
+      self.cap = n;
+    }];
+    @get[@at(self.buf), self.len] = c;
+    self.len = self.len + (1 as u64);
+  };
+  part <~ [self as @refT(Self), s as any, a as u64, b as u64] -> @comptime(void) {
+    i <- a;
+    @loop @if[i < b, { self:byte(@get[s, i] as u8); i = i + (1 as u64); @repeat() }];
+  };
+
+  // what was written, as a string
+  text <~ [self as @refT(Self)] -> @comptime(@arr[self.len, u8]) {
+    r <- @zero(@arr[self.len, u8]);
+    i <- 0 as u64;
+    @loop @if[i < self.len, { @get[r, i] = @get[@at(self.buf), i]; i = i + (1 as u64); @repeat() }];
+    r
+  };
+};
+
+// how a type is written: Format.impl(T, @struct{ format <~ [v as T, w as
+// @refT(@any())] -> void ... })
+Format <~ trait("Format");
+int_format <~ @struct{
+  format <~ [v as any, w as @refT(@any())] -> void fmt_int(w, v);
+};
+Format.impl(@int(), int_format);
+Format.impl(@schar(), int_format);
+Format.impl(@uchar(), int_format);
+Format.impl(@sshort(), int_format);
+Format.impl(@ushort(), int_format);
+Format.impl(@sint(), int_format);
+Format.impl(@uint(), int_format);
+Format.impl(@slong(), int_format);
+Format.impl(@ulong(), int_format);
+Format.impl(@slonglong(), int_format);
+Format.impl(@ulonglong(), int_format);
+Format.impl(@bool(), @struct{
+  format <~ [v as @bool(), w as @refT(@any())] -> void
+    @if[v, w:part("true", 0 as u64, 4 as u64), w:part("false", 0 as u64, 5 as u64)];
+});
+
+// one argument: a string as its bytes, anything else by its Format impl
+fmt_one <~ [w as @refT(@any()), v as any] -> void {
+  T <~ @typeof(v);
+  @if[Format.has(T), Format.of(T).format(v, w),
+    @if[@compiles(@get[v, 0] as u8), w:part(v, 0 as u64, @len(v) as u64),
+      @compileError("an argument with no Format impl")]];
+};
+
+// fmt(w, ["format", args...]): walks the format here, at compile time, into
+// the writes. A callable holding fmt_one, so the expansion reaches it through
+// fmt itself.
+fmt_call <~ [self as @ast(), w as @ast(), spec as @ast()] -> @inlineast() {
+  f <~ @get[spec, 1];
+  text <~ `f;
+  n <~ @len(text);
+  nargs <~ @len(spec) - 2;
+  wv <~ @gensym(w);
+  out <- '{ @bind[`wv, `w]; };
+  start <- 0;
+  i <- 0;
+  k <- 0;
+  @loop @if[i < n, {
+    c <~ @get[text, i];
+    @if[c == @get["%", 0], {
+      @if[start < i, out = '{ ..`out; (`wv):part(`f, `start as @ulonglong(), `i as @ulonglong()); }];
+      @if[k >= nargs, @compileError("more % than arguments")];
+      arg <~ @get[spec, k + 2];
+      out = '{ ..`out; (`self).one(`wv, `arg); };
+      k = k + 1;
+      start = i + 1;
+    }];
+    // the character after / is written as it is
+    @if[c == @get["/", 0], {
+      @if[start < i, out = '{ ..`out; (`wv):part(`f, `start as @ulonglong(), `i as @ulonglong()); }];
+      start = i + 1;
+      i = i + 1;
+    }];
+    i = i + 1;
+    @repeat()
+  }];
+  @if[start < n, out = '{ ..`out; (`wv):part(`f, `start as @ulonglong(), `n as @ulonglong()); }];
+  @if[k != nargs, @compileError("more arguments than %")];
+  out
+};
+fmt <~ @struct{
+  one <~ fmt_one;
+  `'(`@id("()") <~ fmt_call);
+}();
+
+@cinclude("<stdio.h>");
+stdout_put <~ [self as @refT(writer), p as @ptr(u8), n as u64] -> void
+  @cexpr[void, "fwrite(a1, 1, a2, stdout)"];
+stdout_writer <~ [] -> writer {
+  w <- writer();
+  w.put = stdout_put;
+  w
+};
+
+// print(["format", args...]): fmt to stdout
+print_call <~ [self as @ast(), spec as @ast()] -> @inlineast() {
+  w <~ @gensym(w);
+  '{
+    @bind[`w, @at@alloca[(`self).Writer]];
+    `w = (`self).stdout();
+    (`self).fmt(`w, `spec);
+  }
+};
+print <~ @struct{
+  Writer <~ writer;
+  stdout <~ stdout_writer;
+  fmt <~ fmt;
+  `'(`@id("()") <~ print_call);
+}();
+
+@struct{
+  writer <~ writer;
+  ct_buffer <~ ct_buffer;
+  Format <~ Format;
+  fmt_int <~ fmt_int;
+  fmt_one <~ fmt_one;
+  fmt <~ fmt;
+  stdout_writer <~ stdout_writer;
+  print <~ print;
+}

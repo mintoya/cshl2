@@ -105,7 +105,10 @@ fn compiledFails(init: std.process.Init, gpa: std.mem.Allocator, path: []const u
     if (!cc.term.success()) return try std.fmt.allocPrint(gpa, "zig cc failed on {s}:\n{s}", .{ c_path, cc.stderr });
     const run = try std.process.run(gpa, init.io, .{ .argv = &.{exe_path} });
     if (!run.term.success()) return try std.fmt.allocPrint(gpa, "{s} didn't exit cleanly", .{exe_path});
-    if (!std.mem.eql(u8, run.stdout, "true\n")) return try std.fmt.allocPrint(gpa, "printed {s}", .{std.mem.trimEnd(u8, run.stdout, "\n")});
+    // what the program printed itself comes first; the value is the last line
+    if (!std.mem.endsWith(u8, run.stdout, "true\n") or
+        (run.stdout.len > 5 and run.stdout[run.stdout.len - 6] != '\n'))
+        return try std.fmt.allocPrint(gpa, "printed {s}", .{std.mem.trimEnd(u8, run.stdout, "\n")});
     return null;
 }
 

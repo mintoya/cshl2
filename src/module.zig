@@ -4,11 +4,14 @@ const std = @import("std");
 const ir = @import("ir.zig");
 const types = @import("types.zig");
 const Type = types.Type;
+const SrcRef = @import("ast.zig").SrcRef;
 
 pub const Reg = ir.node.Reg;
 
 pub const Func = struct {
     nodes: std.ArrayList(ir.node) = .empty,
+    /// where each node came from in a file, for #line; null before any
+    locs: std.ArrayList(?SrcRef) = .empty,
     /// the type of each register; registers are the function's locals
     regs: std.ArrayList(Type) = .empty,
     /// the registers `arg` nodes fill, in order
@@ -16,6 +19,8 @@ pub const Func = struct {
     ret: Type,
     /// the register holding the function's value at the end; null for void
     result: ?Reg = null,
+    /// cshl names of registers bound to them, for debuggers
+    reg_names: std.AutoHashMapUnmanaged(Reg, []const u8) = .empty,
     /// a usize 0, for movs with no offset
     zero: ?Reg = null,
 };

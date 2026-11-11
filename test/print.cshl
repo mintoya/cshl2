@@ -1,0 +1,20 @@
+// compiled only
+// print writes through a stdout writer: % is the next argument, / escapes;
+// a type is written by its Format impl
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/fmt.cshl";
+i32 <~ @sint();
+Point <~ @struct{
+  x <- 0 as i32;
+  y <- 0 as i32;
+};
+Format.impl(Point, @struct{
+  format <~ [p as Point, w as @refT(@any())] -> @void()
+    fmt(w, ["(%, %)", p.x, p.y]);
+});
+x <- (0 - 42) as i32;
+p <- Point();
+p.x = 3 as i32;
+print(["% != %, 100/% at %, %\n", 1, x, p, 1 == 1]);
+1 == 1

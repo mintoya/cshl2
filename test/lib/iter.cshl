@@ -52,8 +52,34 @@ each <~ [body as @ast()] -> @inlineast() {
   }
 };
 
+range <~ [start as any, end as any] -> any {
+  @using @import @path "if.cshl";
+  ResultType <~ @struct {
+    place <- start;
+    end   <~ end;
+  };
+  Iterator.impl(ResultType, @struct{
+    Item  <~ @typeof(start);
+    State <~ ResultType;
+    start <~ [i as ResultType] -> ResultType i;
+    next  <~ [s as @refT(ResultType)] -> ?Item {
+      rt <~ @returntype();
+      s.place = s.place + 1;
+      if s.place > s.end 
+        (rt.null, {
+          val <- rt();
+          val.value = (s.place - 1);
+          val.present = (1==1);
+          val
+        })
+    };
+  });
+  ResultType();
+};
+
 @struct{
   Iterator <~ Iterator;
   for <~ for;
   each <~ each;
+  range <~ range;
 }

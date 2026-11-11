@@ -1,0 +1,12 @@
+// error: field 2 of Point is 1/4 wide, not -40
+// a compile-time buffer is a writer; with @compileError it gives formatted errors
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/fmt.cshl";
+// runs at compile time, so the buffer is written then
+report <~ [n as @int(), wide as @int()] -> @comptime(@void()) {
+  b <~ @at(@alloc[ct_buffer]);
+  fmt(b, ["field % of % is 1//4 wide, not %", n, "Point", wide]);
+  @compileError(b:text())
+};
+report(2, 0 - 40)
