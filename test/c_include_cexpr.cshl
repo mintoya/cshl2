@@ -1,0 +1,9 @@
+// compiled only
+// @cexpr is C text as a value of the type given; with @void() a statement
+@using @import @path "lib/bind.cshl";
+@cinclude("<stdlib.h>");
+i32 <~ @sint();
+@bind[flush, @fn[[], @void(), @cexpr[@void(), "fflush(stdout)"]]];
+x <- @cexpr[i32, "abs(-6) * 7"];
+flush();
+x == 42 as i32

@@ -1,7 +1,7 @@
-// a |> f is f applied to a, left to right: x |> f |> g is g(f(x))
-@bind[inc, @fn[[x as @sint()], @sint(), x + 1]];
-@bind[twice, @fn[[x as @sint()], @sint(), x * 2]];
-@bind[add, @fn[[n as @sint()], @any(), @fn[[x as @sint()], @sint(), x + n]]];
+// left |> body runs body with left bound to _, left to right:
+// x |> _ + 1 |> _ * 2 is (x + 1) * 2
 @bind[v, @at@alloca[@sint()]];
 v = 3;
-((v |> inc |> twice) == 8) and ((v |> add 10) == 13)
+// a place piped in stays a place
+v |> _ = _ + 1;
+((v |> _ + 1 |> _ * 2) == 10) and (v == 4)

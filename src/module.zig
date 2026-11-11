@@ -28,6 +28,8 @@ pub const Module = struct {
     func_addrs: std.AutoArrayHashMapUnmanaged(usize, u32) = .empty,
     /// the function the file's top level lowered into
     main: ?u32 = null,
+    /// @cinclude headers, in order, each once
+    includes: std.StringArrayHashMapUnmanaged(void) = .empty,
 
     /// Appends bytes to rom and returns their offset.
     pub fn addRom(self: *Module, gpa: std.mem.Allocator, bytes: []const u8) !usize {

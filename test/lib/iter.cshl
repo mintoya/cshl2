@@ -33,14 +33,14 @@ for <~ [c as any] -> any {
   r
 };
 
-// each {body}: a function that runs body for each element of an
-// iteration, with the element bound to _
-each <~ [body as @ast()] -> any @fn[[it as @ast()], @inlineast(), {
+// it |> each {body}: runs body for each element of the iteration piped in
+// as _, with the element bound to _
+each <~ [body as @ast()] -> @inlineast() {
   s <~ @gensym(s);
   v <~ @gensym(v);
   '{
-    @bind[`s, @at@alloca[@typeof(`it)]];
-    `s = `it;
+    @bind[`s, @at@alloca[@typeof(_)]];
+    `s = _;
     @loop {
       @bind[`v, @typeof(`s).impl.next((`s).state)];
       @if[(`v).present, {
@@ -50,7 +50,7 @@ each <~ [body as @ast()] -> any @fn[[it as @ast()], @inlineast(), {
       }];
     };
   }
-}];
+};
 
 @struct{
   Iterator <~ Iterator;

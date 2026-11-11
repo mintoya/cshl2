@@ -1,0 +1,6 @@
+// compiled only
+// a C type, named with @opaqueType, filled in by C
+@using @import @path "lib/bind.cshl";
+file <~ @ptr(@opaqueType("FILE"));
+out <- @cexpr[file, "stdout"];
+out != @cexpr[file, "(FILE *)0"]

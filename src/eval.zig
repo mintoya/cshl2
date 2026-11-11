@@ -51,11 +51,15 @@ pub const Scope = struct {
     }
 };
 
-const Param = struct { name: []const u8, T: Type };
+/// A parameter. A type that names an earlier parameter is evaluated per
+/// call, from `T_ast`; until then T is @any().
+const Param = struct { name: []const u8, T: Type, T_ast: ?Ast = null };
 
 const Function = struct {
     params: []const Param,
     ret: Type,
+    /// a return type naming a parameter, evaluated per call; ret is @any()
+    ret_ast: ?Ast = null,
     body: Ast,
     closure: *Scope,
 };
@@ -1338,7 +1342,9 @@ pub const Eval = struct {
         if (self.rt != null and isRuntimeFn(f)) return self.callLowered(handle, args, at, caller);
         const sc = try self.gpa.create(Scope);
         sc.* = .{ .parent = f.closure, .ret = f.ret };
-        for (f.params, args) |p, a| {
+        for (f.params, args) |param, a| {
+            var p = param;
+            if (p.T_ast) |t| p.T = try self.typeArg(t, sc);
             const v: Value = switch (p.T.raw) {
                 .ast, .inlineast => if (p.T.decorators.@"&") blk: {
                     // a reference to an ast takes the caller's variable
@@ -1365,8 +1371,10 @@ pub const Eval = struct {
             };
             try sc.names.put(self.gpa, p.name, v);
         }
+        const ret = if (f.ret_ast) |t| try self.typeArg(t, sc) else f.ret;
+        sc.ret = ret;
         var key: ?[]const u8 = null;
-        if (f.ret.raw == .type and !self.isPtr(f.ret)) {
+        if (ret.raw == .type and !self.isPtr(ret)) {
             var bytes: std.ArrayList(u8) = .empty;
             try bytes.appendSlice(self.gpa, std.mem.asBytes(&handle));
             for (sc.names.values()) |entry| {
@@ -1381,11 +1389,11 @@ pub const Eval = struct {
         // a function giving a type runs at compile time
         const result = if (key != null) try self.atCompileTime(evalIn, .{ self, &.{f.body}, sc }) else try self.evalIn(&.{f.body}, sc);
         if (key) |k| {
-            const v = try self.convert(result, f.ret, f.body);
+            const v = try self.convert(result, ret, f.body);
             try self.type_calls.put(self.gpa, k, v);
             return v;
         }
-        return switch (f.ret.raw) {
+        return switch (ret.raw) {
             // the syntax returned is run in place of the call
             .inlineast => {
                 const code = try self.asAst(result, f.body);
@@ -1393,7 +1401,7 @@ pub const Eval = struct {
                 return self.eval(code, caller);
             },
             .any, .ast => result,
-            else => if (f.ret.decorators.@"&") result else self.convert(result, f.ret, f.body),
+            else => if (ret.decorators.@"&") result else self.convert(result, ret, f.body),
         };
     }
 
@@ -1533,6 +1541,7 @@ pub const Eval = struct {
                 }
                 var R = try self.passType(try self.typeArg(args[1], scope));
                 R.decorators.@"comptime" = false;
+                if (!isRuntimeType(R)) return self.fail(args[1], "{f} isn't a runtime type", .{self.typeName(R)});
                 try sig.append(self.gpa, R);
                 return self.typeValue(try self.fnPtrType(sig.items));
             },
@@ -1964,13 +1973,38 @@ pub const Eval = struct {
                 try self.arity(args, 2, b, at);
                 return self.member(try self.eval(args[0], scope), args[1], at, b == .@":");
             },
-            // a |> f is f applied to a
+            // left |> body: body in a new scope, with left bound to _; a
+            // place stays a place
             .@"|>" => {
                 try self.arity(args, 2, b, at);
-                const f = try self.eval(args[1], scope);
-                return self.apply(f, &.{.{ .ast = args[0] }}, at, scope, false);
+                const v = try self.eval(args[0], scope);
+                const child = try self.gpa.create(Scope);
+                child.* = .{ .parent = scope };
+                try child.names.put(self.gpa, "_", v);
+                return self.evalIn(args[1..2], child);
             },
-            else => return self.fail(at, "@{s} isn't implemented yet", .{builtinName(b)}),
+            // #include in the C output; only at the top level
+            .cinclude => {
+                try self.arity(args, 1, b, at);
+                const h = try self.asString(try self.eval(args[0], scope), args[0]);
+                var s: ?*const Scope = scope;
+                while (s) |sc| : (s = sc.parent)
+                    if (sc.ret != null) return self.fail(at, "@cinclude is only allowed at the top level", .{});
+                if (self.rt != null) try self.module.includes.put(self.gpa, h, {});
+                return self.voidValue();
+            },
+            // @cexpr[T, "c"]: C text as a value of T; with @void() a statement
+            .cexpr => {
+                try self.arity(args, 2, b, at);
+                const T = try self.typeArg(args[0], scope);
+                const text = try self.asString(try self.eval(args[1], scope), args[1]);
+                if (self.rt == null) return self.fail(at, "@cexpr only exists in the C output; it can't run at compile time", .{});
+                if (!isRuntimeType(T)) return self.fail(args[0], "{f} isn't a runtime type", .{self.typeName(T)});
+                const d = try self.newReg(T);
+                try self.emit(.{ .cexpr = .{ .d = d, .text = text } });
+                if (T.raw == .void and !self.isPtr(T)) return self.voidValue();
+                return self.rtValue(T, d);
+            },
         }
     }
 
@@ -2033,18 +2067,37 @@ pub const Eval = struct {
             const ok = p == .call and p.call.len == 3 and headText(p.call[0]) != null and
                 std.mem.eql(u8, headText(p.call[0]).?, "as") and p.call[1] == .id;
             if (!ok) return self.fail(p, "a parameter is `name as T`", .{});
-            const T = try self.typeArg(p.call[2], scope);
-            try params.append(self.gpa, .{ .name = p.call[1].id.gets(), .T = T });
+            // a type naming an earlier parameter waits for the call
+            const dependent = namesAny(p.call[2], params.items);
+            const T = if (dependent) mk(.any) else try self.typeArg(p.call[2], scope);
+            try params.append(self.gpa, .{ .name = p.call[1].id.gets(), .T = T, .T_ast = if (dependent) p.call[2] else null });
             try sig.append(self.gpa, T);
         }
-        const ret = try self.typeArg(args[1], scope);
+        const ret_dependent = namesAny(args[1], params.items);
+        const ret = if (ret_dependent) mk(.any) else try self.typeArg(args[1], scope);
         try sig.append(self.gpa, ret);
         var T = mk(try self.types.add(self.gpa, &self.decors, .{ .@"fn" = sig.items }));
         T.decorators.@"comptime" = true;
         const handle: u32 = @intCast(self.fns.items.len);
         const body = try self.fireUnquotes(args[2], scope);
-        try self.fns.append(self.gpa, .{ .params = params.items, .ret = ret, .body = body, .closure = scope });
+        try self.fns.append(self.gpa, .{ .params = params.items, .ret = ret, .ret_ast = if (ret_dependent) args[1] else null, .body = body, .closure = scope });
         return self.valueOf(u32, T, handle);
+    }
+
+    /// Whether the syntax names one of the parameters.
+    fn namesAny(node: Ast, params: []const Param) bool {
+        switch (node) {
+            .id => |id| {
+                const t = id.gets();
+                for (params) |p| if (std.mem.eql(u8, p.name, t)) return true;
+                return false;
+            },
+            .call => |items| {
+                for (items) |item| if (namesAny(item, params)) return true;
+                return false;
+            },
+            else => return false,
+        }
     }
 
     /// Unquotes written in a function's body fire when the function is

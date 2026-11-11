@@ -102,7 +102,9 @@ const Emitter = struct {
             },
             .arr => |a| {
                 const el = try self.cType(a.T);
-                try w.print("typedef struct {{ {s} v[{d}]; }} {s};\n", .{ el, @max(a.len, 1), name });
+                // v[0] for @arr[0, T]: a GNU C zero-length array, size 0 as
+                // in the layout
+                try w.print("typedef struct {{ {s} v[{d}]; }} {s};\n", .{ el, a.len, name });
             },
             .@"fn" => |sig| {
                 var params: std.ArrayList([]const u8) = .empty;
@@ -188,6 +190,10 @@ const Emitter = struct {
             .loop => try w.writeAll("  for (;;) {\n"),
             .repeat => try w.writeAll("  continue;\n"),
             .endloop => try w.writeAll("  break; }\n"),
+            .cexpr => |c| if (self.isVoid(regs[c.d]))
+                try w.print("  {s};\n", .{c.text})
+            else
+                try w.print("  r{d} = ({s});\n", .{ c.d, c.text }),
         }
     }
 
@@ -239,7 +245,12 @@ pub fn write(gpa: std.mem.Allocator, e: *Eval, out: *std.Io.Writer, why: *[]cons
     const funcs = e.module.funcs.items;
     for (funcs, 0..) |*f, i| try em.function(&body.writer, @intCast(i), f);
 
-    try out.writeAll("#include <stdio.h>\n#include <string.h>\n\n");
+    try out.writeAll("#include <stdio.h>\n#include <string.h>\n");
+    // "<h>" as is, anything else in quotes
+    for (e.module.includes.keys()) |h| {
+        if (h.len > 0 and h[0] == '<') try out.print("#include {s}\n", .{h}) else try out.print("#include \"{s}\"\n", .{h});
+    }
+    try out.writeAll("\n");
     try out.writeAll(em.decls.written());
     const rom = e.module.rom.items;
     try out.print("\nstatic const unsigned char cshl_rom[{d}] = {{", .{@max(rom.len, 1)});

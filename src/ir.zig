@@ -54,4 +54,7 @@ pub const node = union(enum(u8)) {
     loop: void,
     repeat: void,
     endloop: void,
+
+    // C text as the value of d; d is void for a statement
+    cexpr: struct { d: Reg, text: []const u8 },
 };

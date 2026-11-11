@@ -152,6 +152,19 @@ fn expectedError(source: []const u8) ?[]const u8 {
     return null;
 }
 
+/// `// compiled only` in a file's leading comments: it uses C (@cexpr), so
+/// it's only compiled and run, not interpreted.
+fn compiledOnly(source: []const u8) bool {
+    var lines = std.mem.splitScalar(u8, source, '\n');
+    while (lines.next()) |line| {
+        const t = std.mem.trim(u8, line, " \t\r");
+        if (t.len == 0) continue;
+        if (!std.mem.startsWith(u8, t, "//")) return false;
+        if (std.mem.eql(u8, std.mem.trim(u8, t[2..], " \t"), "compiled only")) return true;
+    }
+    return false;
+}
+
 /// Runs each .cshl file in dir with a fresh evaluator. A file passes when it
 /// gives true, or, with `// error: text` at the top, when it fails with a
 /// message containing text. Returns the exit code.
@@ -182,6 +195,13 @@ fn runTests(init: std.process.Init, directory: []const u8, zig: []const u8) !u8 
         const path = try std.fs.path.join(arena.allocator(), &.{ directory, name });
         const source = try std.Io.Dir.cwd().readFileAlloc(init.io, path, arena.allocator(), .unlimited);
         const expected = expectedError(source);
+        if (expected == null and compiledOnly(source)) {
+            if (try compiledFails(init, arena.allocator(), path, name, zig)) |why| {
+                std.debug.print("FAIL {s} (C): {s}\n", .{ name, why });
+                failed += 1;
+            } else std.debug.print("PASS {s}\n", .{name});
+            continue;
+        }
         var e = try eval.Eval.init(arena.allocator(), init.io);
         if (e.evalFile(path, null)) |v| {
             const out = try std.fmt.allocPrint(arena.allocator(), "{f}", .{e.fmtValue(v)});
