@@ -1,9 +1,7 @@
 @using @import @path "bind.cshl";
 @using @import @path "fn.cshl";
 @using @import @path "if.cshl";
-@using @import @path "trait.cshl";
 @using @import @path "types.cshl";
-@using @import @path "ops.cshl";
 
 null <~ @void()();
 ? <~ ((

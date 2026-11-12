@@ -1,0 +1,24 @@
+@using @import @path "bind.cshl";
+@using @import @path "fn.cshl";
+@using @import @path "if.cshl";
+@using @import @path "types.cshl";
+
+
+return<- [in as ast] ->inline '{
+  returned= (1==1);
+  return_yield = `in;
+  @repeat();
+}
+using_return <~ [body as ast]->inline {
+ '{
+    return_yield <- @returntype()();
+    returned <- (0 == 1);
+    @loop @if[returned,{},{
+      `body;
+    }];
+    return_yield 
+ }
+};
+(5 as ill) == ([] -> ill using_return {
+  return 5 as ill;
+})();

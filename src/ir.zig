@@ -46,7 +46,7 @@ pub const node = union(enum(u8)) {
         r: Reg,
         d: Reg,
     },
-    // int int, int ptr, ptr ptr
+    // only ints and pointers 
     // TODO: ub?
     cast: struct { l: Reg, d: Reg },
     call: struct { @"fn": Reg, d: Reg, args: [:std.math.maxInt(Reg)]Reg },
