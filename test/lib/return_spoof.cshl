@@ -1,24 +1,29 @@
-@using @import @path "bind.cshl";
-@using @import @path "fn.cshl";
-@using @import @path "if.cshl";
-@using @import @path "types.cshl";
+@using @import @path "test/lib/bind.cshl";
+@using @import @path "test/lib/fn.cshl";
+@using @import @path "test/lib/if.cshl";
+@using @import @path "test/lib/types.cshl";
 
 
-return<- [in as ast] ->inline '{
-  returned= (1==1);
-  return_yield = `in;
-  @repeat();
-}
 using_return <~ [body as ast]->inline {
+ returned <- @gensym(returned);
+ return_yield  <- @gensym(return_yield);
+ loop  <- @gensym(loop);
  '{
-    return_yield <- @returntype()();
-    returned <- (0 == 1);
-    @loop @if[returned,{},{
+    return  <~ [in as ast] -> inline '{
+      `returned= (1==1);
+      `return_yield = \`in;
+      @repeat(`loop);
+    };
+    `return_yield <- @returntype()();
+    `returned <- (0 == 1);
+    `loop <~ @loop @if[`returned,{},{
       `body;
     }];
-    return_yield 
+    `return_yield 
  }
 };
-(5 as ill) == ([] -> ill using_return {
-  return 5 as ill;
-})();
+([] -> ill using_return {
+  if (1==0) (
+    return 6 as ill,
+    return 5 as ill);
+})()

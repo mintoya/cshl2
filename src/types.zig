@@ -92,8 +92,8 @@ pub const BuiltinTypes = enum(u8) {
     @"fn", // ((..A),R) type of  function that takes args ..A and returns R, if R is comptime it's cached and dnoesnt run if the args match, if R is volatile , it always runs, useful for things like compile time maps of type to something else
     returntype, //()  type of currrent function's result, not allowed  for a function that retuns any (as that is circular dependancy)
     @"if", //
-    loop, //
-    repeat,
+    loop, // (B) create loop context, returns loop nestedness,
+    repeat, // (?) repeat loop, if calleed  with id, then use nestedness to determine which loop to repeat
     @"defer",
     yield,
     where, // (V) take address of V

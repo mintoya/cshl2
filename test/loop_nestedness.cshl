@@ -1,0 +1,37 @@
+// Repeats resolve to depths 0, 1, and 2 through intervening if scopes.
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/if.cshl";
+
+outer_count   <- 0 as @sint();
+middle_count  <- 0 as @sint();
+inner_count   <- 0 as @sint();
+inner_tail    <- 0 as @sint();
+middle_tail   <- 0 as @sint();
+outer_tail    <- 0 as @sint();
+
+outer <~ @loop {
+  outer_count = outer_count + 1;
+  middle_iteration <- 0 as @sint();
+  middle <~ @loop {
+    middle_count = middle_count + 1;
+    middle_iteration = middle_iteration + 1;
+    inner_iteration <- 0 as @sint();
+    @loop {
+      inner_count = inner_count + 1;
+      inner_iteration = inner_iteration + 1;
+      // Bound a wrongly targeted repeat so it fails instead of hanging.
+      if inner_count < 20 ({
+        if inner_iteration < 2 (@repeat(), {});
+        if middle_iteration < 2 (@repeat(middle), {});
+        if outer_count < 3 (@repeat(outer), {});
+      }, {});
+      inner_tail = inner_tail + 1;
+    };
+    middle_tail = middle_tail + 1;
+  };
+  outer_tail = outer_tail + 1;
+};
+
+(outer_count == 3) and (middle_count == 6) and (inner_count == 12)
+  and (inner_tail == 1) and (middle_tail == 1) and (outer_tail == 1)

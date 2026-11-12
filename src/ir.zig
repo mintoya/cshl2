@@ -46,7 +46,7 @@ pub const node = union(enum(u8)) {
         r: Reg,
         d: Reg,
     },
-    // only ints and pointers 
+    // only ints and pointers
     // TODO: ub?
     cast: struct { l: Reg, d: Reg },
     call: struct { @"fn": Reg, d: Reg, args: [:std.math.maxInt(Reg)]Reg },
@@ -61,7 +61,7 @@ pub const node = union(enum(u8)) {
     endif: void,
 
     loop: void,
-    repeat: void,
+    repeat: u32, // un-nesting level - 1
     endloop: void,
     c: []const u8,
 };
