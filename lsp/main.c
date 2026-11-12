@@ -164,7 +164,11 @@ static char *intern_path(const char *raw, size_t len) {
   char tmp[PATH_MAX], real[PATH_MAX];
   if (len >= sizeof tmp) len = sizeof tmp - 1;
   memcpy(tmp, raw, len), tmp[len] = 0;
+#ifdef _WIN32
+  char *p = _fullpath(real, tmp, sizeof real) ? real : tmp;
+#else
   char *p = realpath(tmp, real) ? real : tmp;
+#endif
   char **have = msxmap_get(paths, p);
   if (have) return *have;
   char *owned = dup_str(server, p, strlen(p));
@@ -330,7 +334,7 @@ static decl *decl_of(doc *d, const binding *b) { return &mList_arr(d->decls)[b->
 
 /* ---------------------------------------------------------- protocol */
 
-static void send(buf *body) {
+static void send_msg(buf *body) {
   printf("Content-Length: %zu\r\n\r\n", buf_len(body));
   fwrite(buf_data(body), 1, buf_len(body), stdout);
   fflush(stdout);
@@ -345,7 +349,7 @@ static void reply(const json *id, buf *result) {
   if (result && buf_len(result)) buf_add(&b, buf_data(result), buf_len(result));
   else buf_lit(&b, "null");
   buf_lit(&b, "}");
-  send(&b);
+  send_msg(&b);
 }
 
 static doc *find_doc(const char *uri) {
@@ -423,7 +427,7 @@ static void publish(doc *d) {
     buf_lit(&b, "}");
   }
   buf_lit(&b, "]}}");
-  send(&b);
+  send_msg(&b);
 }
 
 /* the binding at a position in d's file: a use's, or a declaration's */
@@ -607,7 +611,7 @@ static void close_doc(const json *params) {
   buf_lit(&b, "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{\"uri\":");
   buf_str(&b, d->uri, strlen(d->uri));
   buf_lit(&b, ",\"diagnostics\":[]}}");
-  send(&b);
+  send_msg(&b);
   for (size_t i = 0; i < mList_len(docs); i++)
     if (mList_arr(docs)[i] == d) {
       mList_rem(docs, i);
@@ -684,7 +688,7 @@ int main(void) {
       buf b = buf_new(req);
       buf_printf(&b, "{\"jsonrpc\":\"2.0\",\"id\":%ld,\"error\":{\"code\":-32601,\"message\":\"unsupported\"}}",
                  json_int(id, 0));
-      send(&b);
+      send_msg(&b);
     }
   }
   return 1;

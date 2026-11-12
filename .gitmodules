@@ -1,3 +1,6 @@
 [submodule "lsp/deps/wheels"]
 	path = lsp/deps/wheels
 	url = https://codeberg.org/mintoya/wheels
+[submodule "vendor/tree-sitter"]
+	path = vendor/tree-sitter
+	url = https://github.com/tree-sitter/tree-sitter

@@ -10,6 +10,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    ts_c.addIncludePath(b.path("vendor/tree-sitter/lib/include"));
 
     const exe = b.addExecutable(.{
         .name = "ccshl",
@@ -34,7 +35,6 @@ pub fn build(b: *std.Build) void {
     inspect.root_module.addCSourceFile(.{ .file = b.path("tools/inspect.c"), .flags = &.{"-std=c11"} });
     inspect.root_module.addIncludePath(b.path("include"));
     inspect.root_module.linkLibrary(lib);
-    inspect.root_module.linkSystemLibrary("tree-sitter", .{});
     b.installArtifact(inspect);
 
     // the language server, over the library; wheels (a submodule) is only
@@ -50,7 +50,6 @@ pub fn build(b: *std.Build) void {
     lsp.root_module.addIncludePath(b.path("include"));
     lsp.root_module.addIncludePath(b.path("lsp/deps/wheels"));
     lsp.root_module.linkLibrary(lib);
-    lsp.root_module.linkSystemLibrary("tree-sitter", .{});
     b.installArtifact(lsp);
 
     const run_step = b.step("run", "Run the app");
@@ -110,6 +109,18 @@ fn compilerModule(
         .flags = &.{"-std=c11"},
     });
     m.addIncludePath(b.path("tree-sitter-cshl/src"));
-    m.linkSystemLibrary("tree-sitter", .{});
+
+    // tree-sitter's runtime, vendored (vendor/tree-sitter submodule) since
+    // its own build.zig doesn't track this zig version's Build API.
+    m.addCSourceFile(.{
+        .file = b.path("vendor/tree-sitter/lib/src/lib.c"),
+        .flags = &.{"-std=c11"},
+    });
+    m.addIncludePath(b.path("vendor/tree-sitter/lib/include"));
+    m.addIncludePath(b.path("vendor/tree-sitter/lib/src"));
+    m.addCMacro("_POSIX_C_SOURCE", "200112L");
+    m.addCMacro("_DEFAULT_SOURCE", "");
+    m.addCMacro("_BSD_SOURCE", "");
+    m.addCMacro("_DARWIN_C_SOURCE", "");
     return m;
 }
