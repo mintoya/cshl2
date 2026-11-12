@@ -5,3 +5,4 @@
 /tree-sitter-cshl/src
 /tree-sitter-cshl/tree-sitter.json
 *.cshl.c
+/zig-out-release
