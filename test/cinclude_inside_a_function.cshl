@@ -1,0 +1,3 @@
+// error: only allowed at the top level
+@bind[f, @fn[[], @void(), @cinclude("<stdio.h>")]];
+f()

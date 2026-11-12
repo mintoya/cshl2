@@ -1,0 +1,9 @@
+// `as` with @any() binds the way an @any() parameter does: @refT(@any())
+// keeps the place, a plain @any() copies the value with its own type
+@using @import @path "lib/bind.cshl";
+i <- 5 as @sint();
+alias <~ i as @refT(@any());
+copy  <~ i as @any();
+alias = 6 as @sint();
+(i == 6) and (copy == 5) and (@typeof(copy) == @sint())
+  and @isreferance(alias) and (@isreferance(copy) == (1 != 1))

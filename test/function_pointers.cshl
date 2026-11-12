@@ -1,0 +1,10 @@
+// a function over runtime types converts to a @fnptr with its signature;
+// calling the pointer calls the function
+@bind[i32, @sint()];
+@bind[add, @fn[[a as i32, b as i32], i32, a + b]];
+@bind[mul, @fn[[a as i32, b as i32], i32, a * b]];
+@bind[op, @at@alloca[@fnptr[[i32, i32], i32]]];
+op = add as @fnptr[[i32, i32], i32];
+@bind[x, op(2, 3)];
+op = mul as @fnptr[[i32, i32], i32];
+(x == 5) and (op(2, 3) == 6)

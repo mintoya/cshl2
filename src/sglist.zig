@@ -51,8 +51,7 @@ pub fn SgList(T: type, comptime starting_shift: u7, comptime ending_shift: u7) t
             while (true) {
                 if (self.len > std.math.maxInt(usize) - (1 << starting_shift)) return error.OutOfMemory;
                 const section = idx1(self.len);
-                if (section >= self.arrays.len or section + starting_shift >= @bitSizeOf(usize))
-                    return error.OutOfMemory;
+                if (section >= self.arrays.len or section + starting_shift >= @bitSizeOf(usize)) return error.OutOfMemory;
                 if (self.arrays[section] == null)
                     self.arrays[section] = (try alloc.alloc(T, sectionLen(section))).ptr;
                 const off = idx2(self.len);

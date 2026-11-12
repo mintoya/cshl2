@@ -7,32 +7,38 @@ pub const node = union(enum(u8)) {
         MUL,
         DIV,
         MOD,
-        EQ,
-        NE,
-        LT,
-        GT,
-        LE,
-        GE,
-        // it's incredibly easy to implement short circuiting in the language, so that's not happening here
-        AND,
-        OR,
-        XOR,
         BAND,
         BOR,
         BXOR,
         SHL,
         SHR,
-        CMP,
+        // reesult type not the same
+        EQ, // ==
+        NE, // !=
+        LT, // <
+        GT, // >
+        LE, // <=
+        GE, // >=
+        AND, // !!&&!!
+        OR, // !!||!!
+        XOR, // !!^!!
+        CMP, // (a-b)?(a-b)<0?-1:1:0
     };
-    pub const movKind = enum(u8) { VV, VP, PP };
+    pub const movKind = enum(u8) {
+        // worth casting eveerything to char pointners
+        VV, // memcpy(&r,&l,size)
+        VP, // memcpy(&r,l,size)
+        PV, // memcpy(r,&l,size)
+        PP, // memcpy(r,l,size)
+    };
     mov: struct {
         kind: movKind,
-        off: Reg,
         l: Reg,
         r: Reg,
+        size: usize,
     },
     // read from offset off into register d from rom
-    // globals are still out on the language
+    // there are no globals alowed, so no equivalet 'ram'
     rom: struct { d: Reg, off: usize },
     math: struct { // only integers and pointers, pointers as whatever usize is
         op: mathKind,
@@ -41,10 +47,13 @@ pub const node = union(enum(u8)) {
         d: Reg,
     },
     // int int, int ptr, ptr ptr
+    // TODO: ub?
     cast: struct { l: Reg, d: Reg },
     call: struct { @"fn": Reg, d: Reg, args: [:std.math.maxInt(Reg)]Reg },
     arg: struct { idx: u32, d: Reg },
+    ret: Reg,
     // d is a pointer, d = &l
+    // element pointeer would be an addition after this or something
     ldp: struct { l: Reg, d: Reg },
 
     @"if": Reg,
@@ -54,4 +63,9 @@ pub const node = union(enum(u8)) {
     loop: void,
     repeat: void,
     endloop: void,
+    c: []const u8,
+};
+pub const Ir = struct {
+    loc: *const @import("ast.zig").SrcRef,
+    node: node,
 };

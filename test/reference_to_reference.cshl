@@ -1,0 +1,2 @@
+// error: a reference can't be to a reference
+@refT(@refT(@sint()))

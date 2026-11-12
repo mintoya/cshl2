@@ -1,0 +1,18 @@
+// struct members by index and name, and what arrays and pointers hold
+@bind[S, @struct{
+  @bind[a, @at@alloca[@schar()]];
+  @bind[k, 7];
+  @bind[b, @at@alloca[@sint()]];
+  b = 9;
+}];
+@bind[s, S()];
+(@offsetof(S, a) == 0)
+  and (@offsetof(S, b) == @alignof(@sint()))
+  and (@fieldtype(S, 0) == @schar())
+  and (@fieldtype(S, 1) == @int())
+  and (@fieldval(s, 2) == 9)
+  and (@fieldval(S, 1) == 7)
+  and (@membertype(@arr[4, @sint()]) == @sint())
+  and (@membertype(@ptr(@uint())) == @uint())
+  and (@fieldtype(@fnptr[[@sint()], @uint()], 0) == @sint())
+  and (@fieldtype(@fnptr[[@sint()], @uint()], 1) == @uint())

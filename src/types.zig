@@ -60,44 +60,44 @@ pub const TypeIdx = enum(u32) {
     }
 };
 pub const BuiltinTypes = enum(u8) {
-    void,
-    bool,
-    type,
-    ast,
-    inlineast,
-    outlineast,
-    any,
-    int,
-    schar,
-    sshort,
-    sint,
-    slong,
-    slonglong,
-    uchar,
-    ushort,
-    uint,
-    ulong,
-    ulonglong,
-    arr, // TODO
-    ptr,
-    refT,
-    fnptr, // TODO
-    @"comptime",
-    @"const",
-    @"volatile",
-    @"struct", // TODO
-    this,
-    opaqueType, // TODO
-    @"fn", // TODO
-    returntype,
-    @"if",
-    loop,
+    // all functions,  so @name(...)
+    void, // () void type
+    bool, // () bool type
+    type, // () type type
+    ast, // () ast type
+    inlineast, // () inline ast type, when returned from a function, get's unquoted, otherwise meaningless
+    outlineast, // (function call) given functoin that returns inlineast, gives the ast before it get's unquoted
+    any, // () type of any, only meaningful in functoin signature and type casting
+    int, // () compiel time integer, arbitrary precision, signed
+    schar, // () signed c char
+    sshort, // () signecd c short
+    sint, // () signed c int
+    slong, // () signed c long
+    slonglong, // () signed c longlong
+    uchar, // () unsigned c longlong
+    ushort, // () unsigned c longlong
+    uint, // () unsigned c longlong
+    ulong, // () unsigned c longlong
+    ulonglong, // () unsigned c longlong
+    arr, // (N,T) type of an array of N T's
+    ptr, // (T) pointer to T
+    refT, // (T) referance to T
+    fnptr, // ((..A),R) type of  function pointer that takes args ..A and returns R
+    @"comptime", // (T) compile time version of type T
+    @"const", // (T) constant version of type T
+    @"volatile", // (T) volatile verison of type T
+    @"struct", // (B) creates namespace for  B, whatever is boudn to a referance becomes a runtime sized member of result type, otherwise, it's a compile time member, see @bind and bind.cshl
+    this, // () within a struct, refers to the  type being created
+    opaqueType, // (str) type of a c type with the name str
+    @"fn", // ((..A),R) type of  function that takes args ..A and returns R, if R is comptime it's cached and dnoesnt run if the args match, if R is volatile , it always runs, useful for things like compile time maps of type to something else
+    returntype, //()  type of currrent function's result, not allowed  for a function that retuns any (as that is circular dependancy)
+    @"if", //
+    loop, //
     repeat,
     @"defer",
     yield,
-    where,
-    at,
-    ref,
+    where, // (V) take address of V
+    at, // (V) make a pointer to a referance to ti's pointee
     comptime_alloc,
     comptime_free,
     stackptr,
@@ -106,10 +106,10 @@ pub const BuiltinTypes = enum(u8) {
     get,
     ast_stringeq,
     apply,
-    gensym,
+    gensym, // (id) generates ast that is an identifer based on id and something else
     id,
-    compileError,
-    compiles,
+    compileError, // (str) generate compiel error who's content is str
+    compiles, // (B) check if what's passed in
     log,
     raw,
     typeof,
@@ -165,7 +165,7 @@ pub const Decor = enum(u8) { @"const", @"volatile", @"*", null };
 pub const DecorMap = struct {
     map: std.ArrayHashMapUnmanaged(
         []const Decor,
-        u32,
+        u30,
         struct {
             pub fn hash(self: @This(), K: []const Decor) u32 {
                 _ = self;
@@ -221,7 +221,7 @@ pub const DecorMap = struct {
         self: *@This(),
         alloc: std.mem.Allocator,
         key: [*:.null]const Decor,
-    ) !u32 {
+    ) !u30 {
         const owned = try alloc.dupe(Decor, std.mem.span(key));
         defer alloc.free(owned);
         var k = owned;
@@ -230,7 +230,7 @@ pub const DecorMap = struct {
         if (self.map.get(k)) |v| return v;
 
         const new = try self.list.getContiguous(alloc, k.len + 1);
-        const res: u32 = @intCast(self.list.len - new.len);
+        const res: u30 = @intCast(self.list.len - new.len);
         @memcpy(new[0..k.len], k);
         new[k.len] = .null;
         try self.map.put(alloc, new[0..k.len], res);
@@ -238,7 +238,7 @@ pub const DecorMap = struct {
     }
     pub fn asSliceTemp(
         self: @This(),
-        val: u32,
+        val: u30,
     ) [*:.null]const Decor {
         return @ptrCast(self.list.getConst(val));
     }
@@ -299,7 +299,13 @@ test "decor map" {
     try std.testing.expect(const_pointer != try m.getOrSet(std.testing.allocator, &buf));
 }
 
-pub const Layout = struct { size: usize, alignment: u16 };
+pub const Layout = struct {
+    size: usize,
+    alignment: u16,
+    pub fn of(t: type) @This() {
+        return .{ .size = @sizeOf(t), .alignment = @alignOf(t) };
+    }
+};
 pub const Type = struct {
     raw: TypeIdx,
     decorators: packed struct {
@@ -311,32 +317,27 @@ pub const Type = struct {
     pub const LayoutError = error{ NoLayout, Unimplemented };
 
     pub fn layout(self: Type, decors: *const DecorMap, types: *const TypeMap) LayoutError!?Layout {
-        const of = struct {
-            fn of(comptime T: type) Layout {
-                return .{ .size = @sizeOf(T), .alignment = @alignOf(T) };
-            }
-        }.of;
         for (std.mem.span(decors.asSliceTemp(self.decorators.decor))) |d| switch (d) {
-            .@"*" => return of(*anyopaque),
+            .@"*" => return .of(*anyopaque),
             else => {},
         };
         return switch (self.raw) {
             .void => .{ .size = 0, .alignment = 1 },
-            .bool => of(bool),
-            .schar => of(i8),
-            .uchar => of(u8),
-            .sshort => of(c_short),
-            .ushort => of(c_ushort),
-            .sint => of(c_int),
-            .uint => of(c_uint),
-            .slong => of(c_long),
-            .ulong => of(c_ulong),
-            .slonglong => of(c_longlong),
-            .ulonglong => of(c_ulonglong),
-            .int => of(std.math.big.int.Const),
-            .builtin => of(BuiltinTypes),
-            .type => of(Type),
-            .inlineast, .ast => of(@import("ast.zig").Ast),
+            .bool => .of(bool),
+            .schar => .of(i8),
+            .uchar => .of(u8),
+            .sint => .of(c_int),
+            .uint => .of(c_uint),
+            .slong => .of(c_long),
+            .ulong => .of(c_ulong),
+            .sshort => .of(c_short),
+            .ushort => .of(c_ushort),
+            .slonglong => .of(c_longlong),
+            .ulonglong => .of(c_ulonglong),
+            .int => .of(std.math.big.int.Const),
+            .builtin => .of(BuiltinTypes),
+            .type => .of(Type),
+            .inlineast, .ast => .of(@import("ast.zig").Ast),
             .any => return error.NoLayout,
             _ => switch (types.get(self.raw)) {
                 // a function is comptime: its layout is the compiler's
@@ -365,36 +366,27 @@ pub const TypeMap = struct {
     };
 
     const first: u32 = @backingInt(TypeIdx.builtin) + 1;
-
-    entries: std.ArrayList(Entry) = .empty,
-    layouts: std.ArrayList(Type.LayoutError!Layout) = .empty,
+    entries: std.ArrayList(struct { Entry, Type.LayoutError!Layout }) = .empty,
     pub const empty: @This() = .{};
 
     pub fn deinit(self: *@This(), alloc: std.mem.Allocator) void {
-        for (self.entries.items) |e| switch (e) {
+        for (self.entries.items) |e| switch (e[0]) {
             .@"struct" => |members| alloc.free(members),
             .@"fn" => |members| alloc.free(members),
         };
         self.entries.deinit(alloc);
-        self.layouts.deinit(alloc);
     }
-
     pub fn add(self: *@This(), alloc: std.mem.Allocator, decors: *const DecorMap, entry: Entry) !TypeIdx {
         const idx: TypeIdx = @fromBackingInt(@intCast(first + @as(u32, @intCast(self.entries.items.len))));
         const l: Type.LayoutError!Layout = switch (entry) {
-            .@"fn" => .{
-                .size = @sizeOf(*const fn () callconv(.c) void),
-                .alignment = @alignOf(*const fn () callconv(.c) void),
-            },
+            .@"fn" => .of(*const fn () callconv(.c) void),
             .@"struct" => |members| structLayout(members, decors, self),
         };
         try self.entries.ensureUnusedCapacity(alloc, 1);
-        try self.layouts.ensureUnusedCapacity(alloc, 1);
-        self.entries.appendAssumeCapacity(switch (entry) {
+        self.entries.appendAssumeCapacity(.{ switch (entry) {
             .@"struct" => |members| .{ .@"struct" = try alloc.dupe(StructMember, members) },
             .@"fn" => |members| .{ .@"fn" = try alloc.dupe(Type, members) },
-        });
-        self.layouts.appendAssumeCapacity(l);
+        }, l });
         return idx;
     }
     fn structLayout(members: []const StructMember, decors: *const DecorMap, types: *const TypeMap) Type.LayoutError!Layout {
@@ -411,12 +403,12 @@ pub const TypeMap = struct {
     pub fn cachedLayout(self: *const @This(), idx: TypeIdx) Type.LayoutError!Layout {
         const i = @backingInt(idx);
         std.debug.assert(i >= first);
-        return self.layouts.items[i - first];
+        return self.entries.items[i - first][1];
     }
     pub fn get(self: *const @This(), idx: TypeIdx) Entry {
         const i = @backingInt(idx);
         std.debug.assert(i >= first);
-        return self.entries.items[i - first];
+        return self.entries.items[i - first][0];
     }
 };
 test "layout" {

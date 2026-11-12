@@ -1,0 +1,13 @@
+// the item can be a runtime value: the arms become runtime branches
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/match.cshl";
+i32 <~ @sint();
+x <- 6 as i32;
+r <~ match x [
+  1    |> 10 as i32,
+  6    |> 60 as i32,
+  else |> 0 as i32,
+];
+x = 1 as i32;
+s <~ match x [1 |> 10 as i32, else |> 0 as i32];
+(r == 60) and (s == 10)

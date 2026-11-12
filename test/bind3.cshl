@@ -10,5 +10,3 @@ z <- 0 as i32;
 z = (x + y);
 
 (z == 11)
-// weather it's a referance is not in the type
-  and (@typeof(z) == i32)

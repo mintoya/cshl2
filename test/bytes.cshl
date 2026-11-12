@@ -1,0 +1,36 @@
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/if.cshl";
+
+type <~ @type();
+void <~ @void() as type;
+any  <~ @any() as type;
+bool <~ @bool() as type;
+false <~ (0 == 1) as @comptime(bool);
+true  <~ (1 == 1) as @comptime(bool);
+asBytes <~ ((v as any)->any {
+  t <~ @typeof(v);
+  n <~ @sizeof(t);
+  @at((@where v) as @ptr@arr[n,@schar()])
+});
+
+memEql  <~ ((a as any, b as any)->bool 
+  if @sizeof(@typeof(a)) == @sizeof(@typeof(a)) ({
+    amem <~ asBytes(a);
+    bmem <~ asBytes(b);
+    curr <- 0 as @ulonglong();
+    @loop{
+      if @get[amem,curr] == @get[bmem,curr] 
+      ({ curr = curr + 1;
+        if curr != (@sizeof(@typeof(amem))) 
+          (@repeat(),
+          {});
+        },
+        {});
+    };
+    curr == (@sizeof(@typeof(amem)))
+  }, false)
+);
+
+memEql("hello","hello") 
+  and (memEql("hello","hell1") == false)

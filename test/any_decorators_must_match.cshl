@@ -1,0 +1,13 @@
+// decorators on @any() must match the argument's, outermost first
+@bind[false, 1 != 1];
+@bind[deref, @fn[[p as @ptr(@any())], @any(), @at(p)]];
+@bind[place, @fn[[p as @refT(@any())], @any(), p]];
+@bind[to_const, @fn[[p as @ptr(@const(@any()))], @any(), 1]];
+@bind[x, @at@alloca[@sint()]];
+@bind[k, @at@alloca[@const(@sint())]];
+x = 9;
+(deref(@where(x)) == 9)
+  and (@compiles(deref(5)) == false)
+  and (@compiles(place(5)) == false)
+  and @compiles(to_const(@where(k)))
+  and (@compiles(to_const(@where(x))) == false)

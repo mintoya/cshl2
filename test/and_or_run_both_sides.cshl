@@ -1,0 +1,9 @@
+// and and or are plain bool operations: both sides always run
+// implementing  short-circuiting would be trivial, inside the language
+@bind[n, @at@alloca[@sint()]];
+@bind[bump, @fn[[v as @refT(@sint())], @sint(), v = v + 1]];
+@bind[false, 1 != 1];
+@bind[true, 1 == 1];
+@bind[a, false and (bump(n) == 1)];
+@bind[b, true or (bump(n) == 2)];
+(n == 2) and (a == false) and (b == true)

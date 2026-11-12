@@ -1,0 +1,9 @@
+// a struct value with a () member can be called; it gets itself first
+@bind[Counter, @struct{
+  @bind[n, @at@alloca[@sint()]];
+  ` '@bind[`@id("()"), @fn[[self as @refT(@this())], @sint(), self.n = self.n + 1]]
+}];
+@bind[c, @at@alloca[Counter]];
+c();
+c();
+c() == 3

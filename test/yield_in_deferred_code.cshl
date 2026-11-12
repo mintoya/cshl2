@@ -1,0 +1,4 @@
+// in deferred code, @yield() is the value the scope yielded
+@bind[seen, @at@alloca[@sint()]];
+@bind[v, { @defer(seen = @yield() + 1); 41 as @sint() }];
+(v == 41) and (seen == 42)

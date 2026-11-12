@@ -1,0 +1,5 @@
+// places bound in a struct block are its fields, with their values as defaults; the rest is its namespace
+@bind[S, @struct{ @bind[a, @at@alloca[@sint()]]; a = 7; @bind[k, 2] }];
+@bind[s, @at@alloca[S]];
+s = S();
+(s.a + S.k == 9) and (@zero(S).a == 0)

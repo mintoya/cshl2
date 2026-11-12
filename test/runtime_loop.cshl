@@ -1,0 +1,18 @@
+// a @repeat under a runtime branch makes a runtime loop; @get indexes arrays
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+@using @import @path "lib/if.cshl";
+i32 <~ @sint();
+xs <- @zero(@arr[4, i32]);
+@get[xs, 0] = 3 as i32;
+@get[xs, 1] = 4 as i32;
+@get[xs, 2] = 5 as i32;
+@get[xs, 3] = 6 as i32;
+i <- 0 as @ulong();
+sum <- 0 as i32;
+@loop{
+  sum = sum + @get[xs, i];
+  i = i + 1;
+  if i != 4 (@repeat(), {});
+};
+(sum == 18) and (i == 4)

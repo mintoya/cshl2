@@ -1,0 +1,36 @@
+@using @import @path "bind.cshl";
+@using @import @path "fn.cshl";
+@using @import @path "if.cshl";
+@using @import @path "types.cshl";
+
+slice <~ [T as type] -> type {
+  S <~ @struct{
+    Self <~ @this();
+    ptr <- @zero(@ptr(@arr[0, T]));
+    len <- 0 as ull;
+    get <~ [self as Self, i as ull] -> @refT(T) @get[@at(self.ptr), i];
+    sub <~ [self as Self, start as ull, end as ull] -> Self {
+      r <- Self();
+      r.ptr = (@where self:get(start)) as @ptr(@arr[0, T]);
+      r.len = end - start;
+      r
+    };
+    fromarr <~ [array as  anyref] ->  Self {
+      if @membertype(@typeof(array)) != T 
+        @compileError("wrong array type");
+      result <- @returntype()();
+      result.len = @len(array) as ull;
+      result.ptr = @where(array) as @typeof(result.ptr);
+      result 
+    };
+  };
+  S
+};
+
+slice_of <~ [a as anyref] -> any
+  slice(@membertype(@typeof(a))).fromarr(a);
+
+@struct{
+  slice <~ slice;
+  slice_of <~ slice_of;
+}

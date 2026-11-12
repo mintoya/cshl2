@@ -1,0 +1,6 @@
+// a pointer to an opaque type is a pointer to the named C type
+@bind[FILE, @opaqueType("FILE")];
+@bind[p, @at@alloca[@ptr(FILE)]];
+@bind[q, @at@alloca[@ptr(FILE)]];
+q = p;
+(p == q) and (@where(p) != @where(q))

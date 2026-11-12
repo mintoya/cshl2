@@ -1,0 +1,3 @@
+// a function returning a type gives the same type for the same arguments
+@bind[Box, @fn[[T as @type()], @type(), @struct{ @bind[v, @at@alloca[T]] }]];
+(Box(@sint()) == Box(@sint())) and (Box(@sint()) != Box(@uint()))

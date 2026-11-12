@@ -1,0 +1,7 @@
+// ' builds syntax: ` splices a value in, \ keeps an unquote for later, .. spreads a list
+@bind[n, '(a + 1)];
+@bind[x, '([a, b])];
+('([`n, b]) == '([a + 1, b]))
+  and ((` '(1 + 2)) == 3)
+  and ('(f(..`x)) == '(f(a, b)))
+  and @ast_stringeq(@get['(\`x), 0], "`")

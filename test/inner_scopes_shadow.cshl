@@ -1,0 +1,6 @@
+// a block can bind a name its outer scope binds; @unbind frees a name to be bound again
+@bind[x, 1];
+@bind[y, { @bind[x, 2]; x }];
+@unbind(x);
+@bind[x, 3];
+(y == 2) and (x == 3)

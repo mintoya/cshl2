@@ -1,0 +1,10 @@
+// a parameter's type, or the return type, can name an earlier parameter;
+// it's evaluated per call
+@using @import @path "lib/bind.cshl";
+@using @import @path "lib/fn.cshl";
+type <~ @type();
+i32 <~ @sint();
+zero <~ [t as type] -> t @zero(t);
+same <~ [t as type, v as t] -> t v;
+r <- 3 as i32;
+(zero(i32) == (0 as i32)) and (@typeof(zero(i32)) == i32) and (same(i32, 5) == (5 as i32)) and (@typeof(same(i32, r)) == i32)

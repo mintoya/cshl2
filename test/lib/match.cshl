@@ -1,0 +1,38 @@
+// match x [v |> result, ..., else |> result]: the result of the first arm
+// whose v equals x, or the else arm's. x is evaluated once.
+@using @import @path "bind.cshl";
+
+// the expansion of a match, from its syntax: `x [arms]`
+match <~ @fn[[a as @ast()], @inlineast(), {
+  @if[@len(a) != 2, @compileError("expected match x [arms]")];
+  list <~ @get[a, 1];
+  @if[@ast_stringeq(@get[list, 0], "[]") == (0 == 1), @compileError("expected a [] list of arms")];
+  src <~ @gensym(src);
+
+  // the else arm, wherever it is
+  fallback <- '@compileError("match needs an else arm");
+  i <- 1;
+  @loop @if[i < @len(list), {
+    arm <~ @get[list, i];
+    @if[@ast_stringeq(@get[arm, 0], "|>") == (0 == 1), @compileError("expected v |> result in a match arm")];
+    @if[@ast_stringeq(@get[arm, 1], "else"), fallback = @get[arm, 2]];
+    i = i + 1;
+    @repeat()
+  }];
+
+  // the other arms, last first, each around the ones after it
+  rest <- fallback;
+  i = @len(list) - 1;
+  @loop @if[i > 0, {
+    arm <~ @get[list, i];
+    @if[@ast_stringeq(@get[arm, 1], "else") == (0 == 1),
+      rest = '@if[`src == `(@get[arm, 1]), `(@get[arm, 2]), `rest]];
+    i = i - 1;
+    @repeat()
+  }];
+  '{ @bind[`src, `(@get[a, 0])]; `rest }
+}];
+
+@struct{
+  match <~ match;
+}

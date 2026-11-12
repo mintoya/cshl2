@@ -1,0 +1,3 @@
+// error: match needs an else arm
+@using @import @path "lib/match.cshl";
+match 2 [1 |> 2]

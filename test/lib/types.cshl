@@ -1,0 +1,27 @@
+@using @import @path "bind.cshl";
+
+type  <~ @type();
+@struct{
+  type  <~ type;
+  vtype <~ @volatile@type();
+
+  ull   <~ @ulonglong() as type;
+  ul    <~ @ulong()     as type;
+  ui    <~ @uint()      as type;
+  us    <~ @ushort()    as type;
+  uc    <~ @uchar()     as type;
+  ill   <~ @slonglong() as type;
+  il    <~ @slong()     as type;
+  ii    <~ @sint()      as type;
+  is    <~ @sshort()    as type;
+  ic    <~ @schar()     as type;
+
+
+  void  <~ @void()      as type;
+  any   <~ @any()       as type;
+  anyref<~ @refT@any()  as type;
+  ast   <~ @ast()       as type;
+  inline<~ @inlineast() as type;
+  astval<~ @volatile@ast() as type;
+  bool  <~ @bool()      as type;
+}
