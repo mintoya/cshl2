@@ -182,7 +182,7 @@ pub const DecorMap = struct {
         },
         true,
     ) = .empty,
-    list: SGList(Decor, 5, 33) = .empty,
+    list: SGList(Decor, 5, 11) = .empty,
     pub const empty: @This() = .{};
     pub fn deinit(self: *@This(), alloc: std.mem.Allocator) void {
         self.list.deinit(alloc);
