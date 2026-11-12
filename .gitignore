@@ -6,3 +6,4 @@
 /tree-sitter-cshl/tree-sitter.json
 *.cshl.c
 /a.out
+zig-out
