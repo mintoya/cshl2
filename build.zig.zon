@@ -8,6 +8,10 @@
             .url = "git+https://github.com/Hejsil/zig-clap#05faf3905e8548f5cc269a8836e154065e70128d",
             .hash = "clap-0.12.0-oBajB4XpAQCF1WRKnD5KOKPsnwwT_NNdAJ7Ww3irYJac",
         },
+        .tree_sitter = .{
+            .url = "git+https://github.com/tree-sitter/tree-sitter#8a476cb87443c11e63b23f797af8927c60755e13",
+            .hash = "tree_sitter-0.28.0-Tw2sR6EqDgBXIJefKSouzFgUt6YsBCBSXaKmasSfZvoP",
+        },
     },
     .paths = .{
         "build.zig",

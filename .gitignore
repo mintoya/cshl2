@@ -1,9 +1,7 @@
 /.zig-cache
 /lower
-/zig-out/bin
-/zig-pkg/clap-0.12.0-oBajB4XpAQCF1WRKnD5KOKPsnwwT_NNdAJ7Ww3irYJac
+/zig-out
+/zig-pkg
 /tree-sitter-cshl/src
 /tree-sitter-cshl/tree-sitter.json
 *.cshl.c
-/a.out
-zig-out

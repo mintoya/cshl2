@@ -4,17 +4,21 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // tree-sitter's runtime, fetched as a package; only its sources are
+    // used, compiled into the compiler below
+    const ts = b.dependency("tree_sitter", .{ .target = target, .optimize = optimize });
+
     // tree-sitter's C API plus the generated cshl grammar.
     const ts_c = b.addTranslateC(.{
         .root_source_file = b.path("src/tree_sitter.h"),
         .target = target,
         .optimize = optimize,
     });
-    ts_c.addIncludePath(b.path("vendor/tree-sitter/lib/include"));
+    ts_c.addIncludePath(ts.path("lib/include"));
 
     const exe = b.addExecutable(.{
         .name = "ccshl",
-        .root_module = compilerModule(b, b.path("src/main.zig"), target, optimize, ts_c),
+        .root_module = compilerModule(b, b.path("src/main.zig"), target, optimize, ts_c, ts),
     });
     b.installArtifact(exe);
 
@@ -22,7 +26,7 @@ pub fn build(b: *std.Build) void {
     const lib = b.addLibrary(.{
         .name = "ccshl",
         .linkage = .static,
-        .root_module = compilerModule(b, b.path("src/capi.zig"), target, optimize, ts_c),
+        .root_module = compilerModule(b, b.path("src/capi.zig"), target, optimize, ts_c, ts),
     });
     b.installArtifact(lib);
     b.installFile("include/ccshl.h", "include/ccshl.h");
@@ -93,6 +97,7 @@ fn compilerModule(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     ts_c: *std.Build.Step.TranslateC,
+    ts: *std.Build.Dependency,
 ) *std.Build.Module {
     const m = b.createModule(.{
         .root_source_file = root,
@@ -110,14 +115,13 @@ fn compilerModule(
     });
     m.addIncludePath(b.path("tree-sitter-cshl/src"));
 
-    // tree-sitter's runtime, vendored (vendor/tree-sitter submodule) since
-    // its own build.zig doesn't track this zig version's Build API.
+    // tree-sitter's runtime, as one file, so the static library holds it too
     m.addCSourceFile(.{
-        .file = b.path("vendor/tree-sitter/lib/src/lib.c"),
+        .file = ts.path("lib/src/lib.c"),
         .flags = &.{"-std=c11"},
     });
-    m.addIncludePath(b.path("vendor/tree-sitter/lib/include"));
-    m.addIncludePath(b.path("vendor/tree-sitter/lib/src"));
+    m.addIncludePath(ts.path("lib/include"));
+    m.addIncludePath(ts.path("lib/src"));
     m.addCMacro("_POSIX_C_SOURCE", "200112L");
     m.addCMacro("_DEFAULT_SOURCE", "");
     m.addCMacro("_BSD_SOURCE", "");
