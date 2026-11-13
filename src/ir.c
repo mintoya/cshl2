@@ -2,28 +2,26 @@
 #include "../zig-pkg/c_wheels-0.0.0-0JVaAlKpBADrsLoTHAVkYX7Ss3_9JRX7mlN4DsFw4mGY/macros.h"
 typedef struct nothing_t {
 } nothing_t;
+#define mathKindsS \
+  (add, sub, mul, div, mod, band, bor, bxor, shl, shr, eq, ne, lt, gt, le, ge, and, or, xor, cmp)
+
 typedef enum : unsigned char {
-  MathKind_ADD,
-  MathKind_SUB,
-  MathKind_MUL,
-  MathKind_DIV,
-  MathKind_MOD,
-  MathKind_BAND,
-  MathKind_BOR,
-  MathKind_BXOR,
-  MathKind_SHL,
-  MathKind_SHR,
-  MathKind_EQ,
-  MathKind_NE,
-  MathKind_LT,
-  MathKind_GT,
-  MathKind_LE,
-  MathKind_GE,
-  MathKind_AND,
-  MathKind_OR,
-  MathKind_XOR,
-  MathKind_CMP,
+  #define mathkind_member(x) MathKind_##x
+  APPLY_N_C(mathkind_member, REMOVE_PARENS(mathKindsS))
+  #undef mathkind_member
 } mathKind;
+
+static const struct {
+  #define mathkind_member(name) \
+  mathKind name;
+  APPLY_N(mathkind_member, REMOVE_PARENS(mathKindsS))
+  #undef mathkind_member
+} mathKinds = {
+  #define mathkind_member(name) \
+  .name = MathKind_##name,
+    APPLY_N(mathkind_member, REMOVE_PARENS(mathKindsS))
+  #undef mathkind_member
+};
 typedef enum : unsigned char {
   MOV_VV,
   MOV_VP,

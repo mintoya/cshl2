@@ -34,7 +34,8 @@ pub const NodeTag = enum(c._enum_Ir_node) {
         c.Ir_repeat_enum,
     endloop =
         c.Ir_endloop_enum,
-    c = @import("ir_c").Ir_c_enum,
+    c =
+        c.Ir_c_enum,
 };
 
 // Zig control-flow convenience; all payload layouts come from C.
@@ -94,9 +95,9 @@ pub const Ir = struct {
 };
 
 test "node.toc C-derived instruction payloads" {
-    const math = node.toc(.{ .math = .{ .op = c.MathKind_ADD, .l = 1, .r = 2, .d = 3 } });
+    const math = node.toc(.{ .math = .{ .op = c.MathKind_add, .l = 1, .r = 2, .d = 3 } });
     try std.testing.expectEqual(c.Ir_math_enum, math.tag);
-    try std.testing.expectEqual(c.MathKind_ADD, math.unnamed_0.Ir_math.op);
+    try std.testing.expectEqual(c.MathKind_add, math.unnamed_0.Ir_math.op);
     try std.testing.expectEqual(@as(node.Reg, 3), math.unnamed_0.Ir_math.d);
     const conditional = node.toc(.{ .@"if" = 7 });
     try std.testing.expectEqual(c.Ir_if_enum, conditional.tag);
