@@ -1,0 +1,15 @@
+{
+  "grammars": [
+    {
+      "name": "cshl",
+      "scope": "source.cshl",
+      "path": ".",
+      "file-types": ["cshl"],
+      "highlights": "queries/highlights.scm"
+    }
+  ],
+  "metadata": {
+    "version": "0.0.0",
+    "description": "Tree-sitter grammar for cshl"
+  }
+}
