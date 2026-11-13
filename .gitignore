@@ -3,3 +3,4 @@
 /zig-pkg/*
 /tree-sitter-cshl/src
 /tree-sitter-cshl/tree-sitter.json
+/tree-sitter-cshl/cshl.so

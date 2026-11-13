@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
         const parser_path = b.root.joinString(b.allocator, "tree-sitter-cshl/src/parser.c") catch @panic("OOM");
         std.Io.Dir.cwd().access(b.graph.io, parser_path, .{}) catch |err| switch (err) {
             error.FileNotFound => {
-                const generate = b.addSystemCommand(&.{ "tree-sitter", "generate" });
+                const generate = b.addSystemCommand(&.{ "tree-sitter", "generate", "--abi", "15" });
                 generate.setCwd(b.path("tree-sitter-cshl"));
                 break :blk generate;
             },
