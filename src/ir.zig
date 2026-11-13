@@ -12,6 +12,8 @@ pub const NodeTag = enum(c._enum_Ir_node) {
         c.Ir_math_enum,
     cast =
         c.Ir_cast_enum,
+    @"fn" =
+        c.Ir_fn_enum,
     call =
         c.Ir_call_enum,
     arg =
@@ -49,6 +51,8 @@ pub const node = union(NodeTag) {
     /// Cast l into d; integers and pointers only. TODO: define UB behavior.
     cast: c.Ir_cast,
     /// Call fn with argument registers args, terminated by maxInt(Reg); result goes into d.
+    @"fn": c.Ir_fn,
+    /// Begin the alternative branch of the current conditional.
     call: c.Ir_call,
     /// Load function argument idx into register d.
     arg: c.Ir_arg,
@@ -58,7 +62,7 @@ pub const node = union(NodeTag) {
     ldp: c.Ir_ldp,
     /// Begin a conditional on this register.
     @"if": c.Ir_if,
-    /// Begin the alternative branch of the current conditional.
+    /// Begin a conditional on this register.
     @"else": void,
     /// End the current conditional.
     endif: void,
