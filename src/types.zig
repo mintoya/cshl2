@@ -107,7 +107,7 @@ pub const BuiltinTypes = enum(u8) {
     ast_stringeq,
     apply,
     gensym, // (id) generates ast that is an identifer based on id and something else
-    id,
+    id, // (str) generatie ast identifer of the string
     compileError, // (str) generate compiel error who's content is str
     compiles, // (B) check if what's passed in
     log,

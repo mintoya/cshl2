@@ -6,6 +6,7 @@ test "inc" {
     _ = Ast;
     _ = parse;
     _ = @import("types.zig");
+    _ = @import("ir.zig");
 }
 
 pub fn main(init: std.process.Init) !void {

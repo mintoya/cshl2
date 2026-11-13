@@ -1,0 +1,19 @@
+BasedOnStyle: LLVM
+IndentPPDirectives: BeforeHash
+AlignAfterOpenBracket: BlockIndent
+BreakBeforeBraces: Attach
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+
+IfMacros:
+  - if_likely
+  - if_unlikely
+  - if_decl
+  - if_tu_is
+  - mutex_critical
+
+BinPackParameters: false
+BinPackArguments: false
+AllowAllParametersOfDeclarationOnNextLine: true
+ColumnLimit: 0
+IndentCaseLabels: true
+IndentGotoLabels: true
