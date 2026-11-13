@@ -4,7 +4,27 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Expand tu_def with the C compiler before translate-c.
+    b.dependOnDirectoryContents(b.path("tree-sitter-cshl"));
+    const parser_dir = b.root.joinString(b.allocator, "tree-sitter-cshl/src") catch @panic("OOM");
+    if (std.Io.Dir.cwd().access(b.graph.io, parser_dir, .{})) |_| {
+        b.dependOnDirectoryContents(b.path("tree-sitter-cshl/src"));
+    } else |err| switch (err) {
+        error.FileNotFound => {},
+        else => std.debug.panic("cannot access parser directory: {t}", .{err}),
+    }
+    const generate_parser: ?*std.Build.Step.Run = blk: {
+        const parser_path = b.root.joinString(b.allocator, "tree-sitter-cshl/src/parser.c") catch @panic("OOM");
+        std.Io.Dir.cwd().access(b.graph.io, parser_path, .{}) catch |err| switch (err) {
+            error.FileNotFound => {
+                const generate = b.addSystemCommand(&.{ "tree-sitter", "generate" });
+                generate.setCwd(b.path("tree-sitter-cshl"));
+                break :blk generate;
+            },
+            else => std.debug.panic("cannot access generated parser: {t}", .{err}),
+        };
+        break :blk null;
+    };
+
     const ir_preprocess = b.addSystemCommand(&.{ "zig", "cc", "-std=c23", "-fdefer-ts", "-Wno-pragma-once-outside-header", "-E", "-P" });
     ir_preprocess.addFileArg(b.path("src/ir.c"));
     ir_preprocess.addArg("-o");
@@ -59,6 +79,7 @@ pub fn build(b: *std.Build) void {
     });
     exe.root_module.addIncludePath(b.path("tree-sitter-cshl/src"));
     exe.root_module.linkSystemLibrary("tree-sitter", .{});
+    if (generate_parser) |generate| exe.step.dependOn(&generate.step);
 
     b.installArtifact(exe);
 
@@ -74,12 +95,14 @@ pub fn build(b: *std.Build) void {
     const mod_tests = b.addTest(.{
         .root_module = exe.root_module,
     });
+    if (generate_parser) |generate| mod_tests.step.dependOn(&generate.step);
 
     const run_mod_tests = b.addRunArtifact(mod_tests);
 
     const exe_tests = b.addTest(.{
         .root_module = exe.root_module,
     });
+    if (generate_parser) |generate| exe_tests.step.dependOn(&generate.step);
 
     const run_exe_tests = b.addRunArtifact(exe_tests);
 
