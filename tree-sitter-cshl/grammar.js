@@ -1,22 +1,8 @@
-/// <reference types="tree-sitter-cli/dsl" />
 
-// The tree has the node kinds of the AST:
-//   atoms  id, number, string
-//   list   [a, b] and (a, b): the same thing, the AST's ([] a b); (x) and [x]
-//          are one-item lists
-//   block  {a; b}: the AST's ({} a b)
-//   call   everything that applies something, head in `function`, the rest in
-//          `argument`: f x, f(a, b), f[a, b], a + b, a.b, a:m, 'x
-// Operators are names with no builtin meaning in the grammar; <~, <- and ->
-// come from the language libraries.
-
-// Names start with a letter, _ or @, and may end with one of ? # ! $.
 const IDENTIFIER = /[a-zA-Z_@][a-zA-Z_0-9]*[?#!$]?/;
-// quote ', unquote `, escape \, splice .., and ? # ! $ on their own
 const SYMBOL = /['`\\?#!$]|\.\./;
 const NUMBER = /0b[01]+|0x[0-9a-f]+|[0-9]+/;
 
-// Operator levels between `->` and tight expressions, weakest first.
 const LEVELS = [
   ['logical', ['and', 'or', 'xor']],
   ['comparison', ['==', '!=', '<', '>', '<=', '>=', '<=>'], 'none'],
@@ -49,17 +35,25 @@ module.exports = grammar({
   rules: {
     program: $ => optional(statements($)),
 
-    // Weakest first:
-    //   <~ <-        binding (right-associative)
-    //   f x          spaced application (right-associative): `f (x = y)`
-    //   =            assignment (right-associative)
-    //   ->           (left-associative): `[a] -> T body` is `([a] -> T) body`
-    //   the operator levels in LEVELS, then tight expressions.
-    _expression: $ => choice($._application, alias($._binding, $.call)),
+   _expression: $ => choice($._backward, alias($._binding, $.call)),
     _binding: $ => seq(
-      field('argument', $._application),
+      field('argument', $._backward),
       field('function', choice('<~', '<-')),
       field('argument', $._expression),
+    ),
+
+    _backward: $ => choice($._forward, alias($._backward_call, $.call)),
+    _backward_call: $ => seq(
+      field('argument', $._forward),
+      field('function', '<|'),
+      field('argument', $._backward),
+    ),
+
+    _forward: $ => choice($._application, alias($._forward_call, $.call)),
+    _forward_call: $ => seq(
+      field('argument', $._forward),
+      field('function', '|>'),
+      field('argument', $._application),
     ),
 
     _application: $ => choice($._assignment, $.call),
@@ -137,8 +131,6 @@ module.exports = grammar({
       field('argument', $._word_rest),
     ),
 
-    // The member after `.` or `:`: an atom, or a tight chain of names and
-    // symbols such as `` `name ``.
     _member: $ => choice($._atom, alias($._member_chain, $.call)),
     _member_chain: $ => prec(6, seq(
       field('function', $._atom),
