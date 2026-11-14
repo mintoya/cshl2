@@ -1,55 +1,82 @@
 #pragma once
 #include "../zig-pkg/c_wheels-0.0.0-0JVaAlKpBADrsLoTHAVkYX7Ss3_9JRX7mlN4DsFw4mGY/macros.h"
+
+typedef unsigned char uc;
+typedef unsigned short us;
+typedef unsigned int ui;
+typedef unsigned long ul;
+typedef unsigned long long ull;
+typedef signed char sc;
+typedef signed short ss;
+typedef signed int si;
+typedef signed long sl;
+typedef signed long long sll;
+
 typedef struct nothing_t {
 } nothing_t;
-#define mathKindsS \
-  (add, sub, mul, div, mod, band, bor, bxor, shl, shr, eq, ne, lt, gt, le, ge, and, or, xor, cmp)
+#define mathKindsS      \
+  (add,                 \
+   sub,                 \
+   mul,                 \
+   div,                 \
+   mod,                 \
+   band,                \
+   bor,                 \
+   bxor,                \
+   shl,                 \
+   shr, /*change type*/ \
+   eq,                  \
+   ne,                  \
+   lt,                  \
+   gt,                  \
+   le,                  \
+   ge,                  \
+   and,                 \
+   or,                  \
+   xor,                 \
+   cmp)
 
-typedef enum : unsigned char {
+typedef enum : uc {
   #define mathkind_member(x) MathKind_##x
   APPLY_N_C(mathkind_member, REMOVE_PARENS(mathKindsS))
   #undef mathkind_member
 } mathKind;
 
-static const struct {
-  #define mathkind_member(name) \
-  mathKind name;
-  APPLY_N(mathkind_member, REMOVE_PARENS(mathKindsS))
-  #undef mathkind_member
-} mathKinds = {
-  #define mathkind_member(name) \
-  .name = MathKind_##name,
-    APPLY_N(mathkind_member, REMOVE_PARENS(mathKindsS))
-  #undef mathkind_member
-};
-typedef enum : unsigned char {
+typedef enum : uc {
   MOV_VV,
   MOV_VP,
   MOV_PV,
   MOV_PP,
 } movKind;
 
-typedef unsigned int Reg;
+typedef ui Reg;
+static const Reg Reg_term = (~(Reg)0);
+static inline ull Reg_term_len(const Reg term[]) {
+  ull res = 0;
+  while (term[res] != Reg_term)
+    res++;
+  return res;
+}
 tu_def(
-    (Ir_node, unsigned char),
+    (Ir_node, uc),
     (Ir_mov, struct { //
       movKind kind;
       Reg l, r;
-      unsigned long long size;
+      ull size;
     }),
     (Ir_rom, struct { //
       Reg d;
-      unsigned long long off;
+      ull off;
     }),
     (Ir_math, struct { // only integers and pointers
       mathKind op;
-      Reg l;
-      Reg r;
-      Reg d;
+      Reg l,
+          r,
+          d;
     }),
     (Ir_cast, struct { Reg l, d; }),
     (Ir_fn, struct { //
-      unsigned long fnid;
+      ul fnid;
       Reg d;
     }),
     (Ir_call, struct { //
@@ -58,7 +85,7 @@ tu_def(
       Reg *args;
     }),
     (Ir_arg, struct { //
-      unsigned char idx;
+      uc idx;
       Reg d;
     }),
     (Ir_ret, Reg),
@@ -67,13 +94,13 @@ tu_def(
     (Ir_else, nothing_t),
     (Ir_endif, nothing_t),
     (Ir_loop, nothing_t),
-    (Ir_repeat, unsigned int),
+    (Ir_repeat, ui),
     (Ir_endloop, nothing_t),
     (Ir_c, struct { //
       Reg d;
       struct {
-        unsigned long len;
-        const unsigned char *ptr;
+        ull len;
+        const uc *ptr;
       } sring;
     })
 );
