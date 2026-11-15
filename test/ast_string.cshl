@@ -3,13 +3,13 @@
 // @compileError taking any string, messages can name what was written
 @using @import @path "lib/bind.cshl";
 @using @import @path "lib/fn.cshl";
-u8 <~ @uchar();
-any <~ @any();
+def u8 = @uchar();
+def any = @any();
 
 // a and b joined, in fresh compile-time storage
-join <~ [a as any, b as any] -> any {
-  s <~ @at(@alloc[@arr[@len(a) + @len(b), u8]]);
-  i <- 0;
+def join =~ fn [a as any, b as any] any {
+  def s = @at(@alloc[@arr[@len(a) + @len(b), u8]]);
+  let i = 0;
   @loop @if[i < @len(a), { @get[s, i] = @get[a, i]; i = i + 1; @repeat() }];
   i = 0;
   @loop @if[i < @len(b), { @get[s, @len(a) + i] = @get[b, i]; i = i + 1; @repeat() }];
@@ -19,6 +19,6 @@ join <~ [a as any, b as any] -> any {
 @if[@ast_stringeq('x, @ast_string('x)) == (1 == 0), @compileError("atom")];
 
 // T arrives as the syntax the caller wrote
-needs_impl <~ [T as @ast()] -> @void()
+def needs_impl =~ fn [T as @ast()] @void()
   @compileError(join("no impl for ", @ast_string(T)));
 needs_impl(@ptr(@sint()))

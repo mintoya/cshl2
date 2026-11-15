@@ -30,5 +30,8 @@
   "+" "-" "*" "/" "%" "as"
 ] @operator
 
+; ~ groups the rest of the expression
+"~" @punctuation.special
+
 ["(" ")" "[" "]" "{" "}"] @punctuation.bracket
 ["," ";" "." ":"] @punctuation.delimiter

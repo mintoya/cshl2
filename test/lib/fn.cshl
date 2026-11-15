@@ -1,7 +1,9 @@
+// fn [params] ret body: the parameter list, return type and body, spaced
 @using @import @path "bind.cshl";
-mkfn <~ @fn[[params as @ast(), ret as @ast()], @inlineast(),
-  '@fn[[body as @ast()], @any(), 
-    @fn[`(params), `(ret), \`(body)]]];
-`'@struct{
-  `@id("->") <~ mkfn;
+def fn = @fn[[a as @ast()], @inlineast(), {
+  def rest = @get[a, 1];
+  '@fn[`(@get[a, 0]), `(@get[rest, 0]), `(@get[rest, 1])]
+}];
+@struct{
+  def fn = fn;
 }

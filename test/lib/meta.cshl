@@ -1,11 +1,11 @@
 @using @import @path "bind.cshl";
 @struct{
-  loop    <~ @loop;
-  loop    <~ @thisloop();
-  repeat  <~ @repeat;
-  struct  <~ @struct;
-  true    <~ (1 == 1);
-  false   <~ (1 != 1);
+  def loop    = @loop;
+  def loop    = @thisloop();
+  def repeat  = @repeat;
+  def struct  = @struct;
+  def true    = (1 == 1);
+  def false   = (1 != 1);
   @using @import @path "fn.cshl";
   @using @import @path "if.cshl";
   @using @import @path "match.cshl";

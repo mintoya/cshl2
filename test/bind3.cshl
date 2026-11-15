@@ -1,12 +1,14 @@
 @using @import @path "lib/bind.cshl";
 // typed declarations
 
-type <~ @type();
-i32  <~ @sint() as type;
+def type = @type();
+def i32  = @sint() as type;
 
-x <~ 5 as i32;
-y <~ 6 as i32;
-z <- 0 as i32;
-z = (x + y);
+def x =~ 5 as i32;
+def y =~ 6 as i32;
+let z =~ 0 as i32;
+// functions will be like this 
+// def ident  =~ fn [i as any] any i;
+z =~ x + y;
 
 (z == 11)

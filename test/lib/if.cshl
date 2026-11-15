@@ -2,6 +2,6 @@
 @using @import @path "fn.cshl";
 
 @struct {
-  if <~ ([a as @ast()]->@inlineast()
-    '@if[`@get[a,0] as @bool(),..`@get[a,1]]);
+  def if =~ fn [a as @ast()] @inlineast()
+    '@if[`@get[a,0] as @bool(),..`@get[a,1]];
 }

@@ -3,18 +3,18 @@
 @using @import @path "test/lib/if.cshl";
 @using @import @path "test/lib/types.cshl";
 
-using_return <~ [body as ast]->inline {
- returned <- @gensym(returned);
- return_yield  <- @gensym(return_yield);
- loop  <- @gensym(loop);
+def using_return =~ fn [body as ast] inline {
+ let returned = @gensym(returned);
+ let return_yield  = @gensym(return_yield);
+ let loop  = @gensym(loop);
  '{
-    return  <~ [in as ast] -> inline '{
+    def return =~ fn [in as ast] inline '{
       `returned= (1==1);
       `return_yield = \`in;
       @repeat(`loop);
     };
-    `return_yield <- @returntype()();
-    `returned <- (0 == 1);
+    let `return_yield = @returntype()();
+    let `returned = (0 == 1);
      @loop @if[`returned,{},{
       @bind[`loop,@thisloop()];
       `body;
@@ -22,7 +22,7 @@ using_return <~ [body as ast]->inline {
     `return_yield 
  }
 };
-([] -> ill using_return {
+(fn [] ill using_return {
   if (1==0) (
     return 6 as ill,
     return 5 as ill);

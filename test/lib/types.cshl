@@ -1,27 +1,27 @@
 @using @import @path "bind.cshl";
 
-type  <~ @type();
+def type  = @type();
 @struct{
-  type  <~ type;
-  vtype <~ @volatile@type();
+  def type  = type;
+  def vtype = @volatile@type();
 
-  ull   <~ @ulonglong() as type;
-  ul    <~ @ulong()     as type;
-  ui    <~ @uint()      as type;
-  us    <~ @ushort()    as type;
-  uc    <~ @uchar()     as type;
-  ill   <~ @slonglong() as type;
-  il    <~ @slong()     as type;
-  ii    <~ @sint()      as type;
-  is    <~ @sshort()    as type;
-  ic    <~ @schar()     as type;
+  def ull   = @ulonglong() as type;
+  def ul    = @ulong()     as type;
+  def ui    = @uint()      as type;
+  def us    = @ushort()    as type;
+  def uc    = @uchar()     as type;
+  def ill   = @slonglong() as type;
+  def il    = @slong()     as type;
+  def ii    = @sint()      as type;
+  def is    = @sshort()    as type;
+  def ic    = @schar()     as type;
 
 
-  void  <~ @void()      as type;
-  any   <~ @any()       as type;
-  anyref<~ @refT@any()  as type;
-  ast   <~ @ast()       as type;
-  inline<~ @inlineast() as type;
-  astval<~ @volatile@ast() as type;
-  bool  <~ @bool()      as type;
+  def void  = @void()      as type;
+  def any   = @any()       as type;
+  def anyref= @refT@any()  as type;
+  def ast   = @ast()       as type;
+  def inline= @inlineast() as type;
+  def astval= @volatile@ast() as type;
+  def bool  = @bool()      as type;
 }

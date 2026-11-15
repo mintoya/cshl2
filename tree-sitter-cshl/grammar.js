@@ -36,56 +36,57 @@ module.exports = grammar({
     program: $ => optional(statements($)),
 
    _expression: $ => choice($._backward, alias($._binding, $.call)),
-    _binding: $ => seq(
+    _binding: $ => prec(1, seq(
       field('argument', $._backward),
       field('function', choice('<~', '<-')),
       field('argument', $._expression),
-    ),
+    )),
 
     _backward: $ => choice($._forward, alias($._backward_call, $.call)),
-    _backward_call: $ => seq(
+    _backward_call: $ => prec(1, seq(
       field('argument', $._forward),
       field('function', '<|'),
       field('argument', $._backward),
-    ),
+    )),
 
     _forward: $ => choice($._application, alias($._forward_call, $.call)),
-    _forward_call: $ => seq(
+    _forward_call: $ => prec(1, seq(
       field('argument', $._forward),
       field('function', '|>'),
       field('argument', $._application),
-    ),
+    )),
 
     _application: $ => choice($._assignment, $.call),
-    call: $ => prec.right(seq(
+    call: $ => prec.right(1, seq(
       field('function', $._assignment),
       field('argument', $._application),
     )),
 
-    _assignment: $ => choice($._function, alias($._assignment_call, $.call)),
-    _assignment_call: $ => seq(
+    _assignment: $ => choice($._function, alias($._assignment_call, $.call), alias($._rest, $.list)),
+    _rest: $ => seq('~', $._expression),
+    _assignment_call: $ => prec(1, seq(
       field('argument', $._function),
       field('function', '='),
       field('argument', $._assignment),
-    ),
+    )),
 
     _function: $ => choice($._logical, alias($._function_call, $.call)),
-    _function_call: $ => seq(
+    _function_call: $ => prec(1, seq(
       field('argument', $._function),
       field('function', '->'),
       field('argument', $._logical),
-    ),
+    )),
 
     ...Object.fromEntries(LEVELS.flatMap(([name, operators, associativity], index) => {
       const operand = $ => index + 1 < LEVELS.length ? $['_' + LEVELS[index + 1][0]] : $._tight;
       const left = $ => associativity === 'none' ? operand($) : $['_' + name];
       return [
         ['_' + name, $ => choice(operand($), alias($['_' + name + '_call'], $.call))],
-        ['_' + name + '_call', $ => seq(
+        ['_' + name + '_call', $ => prec(1, seq(
           field('argument', left($)),
           field('function', choiceOf(operators)),
           field('argument', operand($)),
-        )],
+        ))],
       ];
     })),
 

@@ -4,19 +4,19 @@
 @using @import @path "slice.cshl";
 @using @import @path "types.cshl";
 
-allocator <~ @struct{
-  allocatorType <~ @fnptr[[@refT@this(),@ptr(uc),ull,ull],@ptr(uc)];
-  fn <- allocatorType();
-  Self <~ @this();
-  RSelf<~ @refT(Self);
+def allocator = @struct{
+  def allocatorType = @fnptr[[@refT@this(),@ptr(uc),ull,ull],@ptr(uc)];
+  let func = allocatorType();
+  def Self = @this();
+  def RSelf = @refT(Self);
 
-  resize <~ [
+  def resize =~ fn [
     self  as RSelf,
     value as any,
     count as ull,
-  ]->@typeof(value) {
-    result <- value;
-    result.ptr = self:fn(
+  ] @typeof(value) {
+    let result = value;
+    result.ptr = self:func(
       result.ptr as @ptr(uc),
       result.len,
       count
@@ -24,42 +24,40 @@ allocator <~ @struct{
     result.len = count;
     result
   };
-  alloc <~ ([
+  def alloc =~ fn [
     self  as RSelf,
     t     as type,
     count as ull
-  ]->slice(t) 
-    self:resize(@returntype()(),count));
-  free <~ ([
+  ] slice(t)
+    self:resize(@returntype()(),count);
+  def free =~ fn [
     self  as RSelf,
     value as any,
-  ]->void 
-    self:resize(value,0 as ull));
+  ] void
+    self:resize(value,0 as ull);
+    
   // must be at end obviously
-  ctx <- @arr[0,ull]();
+  let ctx = @arr[0,ull]();
 };
 
 @cinclude "stdlib.h";
 
-c_runtime_allocator <- { 
-  tmp <- allocator();
-  tmp.fn = ([
+def discard =~ fn [id as ast] inline '{ def _ = `id; };
+let c_runtime_allocator = { 
+  let tmp = allocator();
+  tmp.func =~ fn [
     _unused as @refT(allocator),
     mem     as @ptr(uc),
     from    as ull,
     to      as ull,
-  ] -> @ptr(uc) {
-    _ <~ mem;
-    @unbind(_);
-    _ <~ from;
-    @unbind(_);
-    _ <~ to;
+  ] @ptr(uc) {
+    discard mem; discard from; discard to;
     @cexpr[@typeof(@returntype()()),"realloc(a1,a3)"] 
-  });
+  };
   tmp
 };
 
-// xs <- c_runtime_allocator:alloc(uc,5);
+// let xs = c_runtime_allocator:alloc(uc,5);
 // @defer c_runtime_allocator:free(xs);
 // xs = c_runtime_allocator:resize(xs,6);
 // 
@@ -71,5 +69,5 @@ c_runtime_allocator <- {
 // xs:get[5] = 0 as i8;
 
 @struct{
-  c_runtime_allocator <~ c_runtime_allocator;
+  def c_runtime_allocator = c_runtime_allocator;
 }

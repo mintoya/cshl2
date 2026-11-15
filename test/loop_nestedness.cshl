@@ -1,20 +1,20 @@
 // Repeats resolve to depths 0, 1, and 2 through intervening if scopes.
 @using @import @path "lib/meta.cshl";
 
-outer_count   <- 0 as ii;
-middle_count  <- 0 as ii;
-inner_count   <- 0 as ii;
-inner_tail    <- 0 as ii;
-middle_tail   <- 0 as ii;
-outer_tail    <- 0 as ii;
+let outer_count   = 0 as ii;
+let middle_count  = 0 as ii;
+let inner_count   = 0 as ii;
+let inner_tail    = 0 as ii;
+let middle_tail   = 0 as ii;
+let outer_tail    = 0 as ii;
 
-loop { outer <~ @thisloop();
+loop { def outer = @thisloop();
   outer_count = outer_count + 1;
-  middle_iteration <- 0 as ii;
-   loop { middle <~ @thisloop();
+  let middle_iteration = 0 as ii;
+   loop { def middle = @thisloop();
     middle_count = middle_count + 1;
     middle_iteration = middle_iteration + 1;
-    inner_iteration <- 0 as ii;
+    let inner_iteration = 0 as ii;
     loop {
       inner_count = inner_count + 1;
       inner_iteration = inner_iteration + 1;

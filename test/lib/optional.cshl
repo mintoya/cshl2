@@ -3,41 +3,41 @@
 @using @import @path "if.cshl";
 @using @import @path "types.cshl";
 
-null <~ @void()();
-? <~ ((
+def null = @void()();
+def ? =~ fn [
   T as type,
-) -> type { 
-  result <~ @struct{
-    present <- (1 != 1) as bool;
-    value   <- @zero(T);
-    orelse  <~ (self as ast, otherwise as ast) -> inline {
-      temp <~ @gensym(temp);
+] type { 
+  def result = @struct{
+    let present = (1 != 1) as bool;
+    let value   = @zero(T);
+    def orelse  =~ fn [self as ast, otherwise as ast] inline {
+      def temp = @gensym(temp);
       '{
-        `temp <~ `self;
+        def `temp = `self;
         `@outlineast(if (`temp).present 
           ((`temp).value, `otherwise))
       }
     };
-    null <~ @this()();
-    from <~ [value as T]->@this() {
-      result <- @returntype()();
+    def null = @this()();
+    def from =~ fn [value as T] @this() {
+      let result = @returntype()();
       result.present = (1==1);
       result.value = value;
       result
     };
   };
   result
-});
+};
 
 /*
 test "optionals example" {
-  x <- (?ull).null;
+  let x = (?ull).null;
   x = x.from(x:orelse{6 as ull});
   x.value == 6
 };
 */
 
 @struct{
-  ? <~ ?;
-  null <~ null;
+  def ? = ?;
+  def null = null;
 }

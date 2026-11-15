@@ -1,12 +1,15 @@
-`'@bind[`@id("<~"),@fn[[name as @ast(), value as @ast()],@inlineast(),{
-  '(@bind[\`name,\`value])
+@bind[def, @fn[[a as @ast()], @inlineast(), {
+  @if[@ast_stringeq(@get[a, 0], "=") == (0 == 1), @compileError("expected def name = value")];
+  '@bind[`(@get[a, 1]), `(@get[a, 2])]
 }]];
-`'@bind[`@id("<-"),@fn[[name as @ast(), value as @ast()],@inlineast(),{
-  typ <~ '(@typeof \`value);
-  '((\`name <~ @at@alloca[\`typ]) = \`value)
+@bind[let, @fn[[a as @ast()], @inlineast(), {
+  @if[@ast_stringeq(@get[a, 0], "=") == (0 == 1), @compileError("expected let name = value")];
+  @bind[name, @get[a, 1]];
+  @bind[value, @get[a, 2]];
+  '(@bind[`name, @at@alloca[@typeof(`value)]] = `value)
 }]];
 
-`'@struct{
-  `@id("<~") <~ `@id("<~");
-  `@id("<-") <~ `@id("<-");
+@struct{
+  def def = def;
+  def let = let;
 }
