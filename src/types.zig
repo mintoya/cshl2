@@ -160,7 +160,8 @@ pub const BuiltinTypes = enum(u8) {
     @":",
     @"|>",
 };
-pub const SGList = @import("sglist.zig").SgList;
+const List = std.ArrayList;
+const SGList = @import("sglist.zig").SgList;
 pub const Decor = enum(u8) { @"const", @"volatile", @"*", null };
 pub const DecorMap = struct {
     map: std.ArrayHashMapUnmanaged(
@@ -340,20 +341,15 @@ pub const Type = struct {
             .inlineast, .ast => .of(@import("ast.zig").Ast),
             .any => return error.NoLayout,
             _ => switch (types.get(self.raw)) {
-                // a function is comptime: its layout is the compiler's
-                // representation of one, not decided yet; a function pointer
-                // is the same entry at runtime
-                .@"fn" => if (self.decorators.@"comptime")
-                    error.Unimplemented
-                else
-                    try types.cachedLayout(self.raw),
+                .fnptr => try types.cachedLayout(self.raw),
+                .@"fn" => .of(FunctionHandle),
                 .@"struct" => try types.cachedLayout(self.raw),
             },
         };
     }
 };
 
-/// The types in `_`
+pub const FunctionHandle = u32;
 pub const TypeMap = struct {
     const Self = @This();
     pub const StructMember = struct {
@@ -364,15 +360,17 @@ pub const TypeMap = struct {
     pub const Entry = union(enum) {
         @"struct": []const StructMember,
         @"fn": []const Type,
+        fnptr: []const Type,
     };
 
     const first: u32 = @backingInt(TypeIdx.builtin) + 1;
-    entries: std.ArrayList(struct { Entry, Type.LayoutError!Layout }) = .empty,
+    entries: List(struct { Entry, Type.LayoutError!Layout }) = .empty,
     pub const empty: Self = .{};
     pub fn deinit(self: *Self, alloc: std.mem.Allocator) void {
         for (self.entries.items) |e| switch (e[0]) {
             .@"struct" => |members| alloc.free(members),
             .@"fn" => |members| alloc.free(members),
+            .fnptr => |members| alloc.free(members),
         };
         self.entries.deinit(alloc);
     }
@@ -380,13 +378,15 @@ pub const TypeMap = struct {
     pub fn add(self: *Self, alloc: std.mem.Allocator, decors: *const DecorMap, entry: Entry) !TypeIdx {
         const idx: TypeIdx = @fromBackingInt(@intCast(first + @as(u32, @intCast(self.entries.items.len))));
         const l: Type.LayoutError!Layout = switch (entry) {
-            .@"fn" => .of(*const fn () callconv(.c) void),
+            .@"fn" => .of(FunctionHandle),
+            .fnptr => .of(*fn () callconv(.c) void),
             .@"struct" => |members| structLayout(members, decors, self),
         };
         try self.entries.ensureUnusedCapacity(alloc, 1);
         self.entries.appendAssumeCapacity(.{ switch (entry) {
             .@"struct" => |members| .{ .@"struct" = try alloc.dupe(StructMember, members) },
             .@"fn" => |members| .{ .@"fn" = try alloc.dupe(Type, members) },
+            .fnptr => |members| .{ .fnptr = try alloc.dupe(Type, members) },
         }, l });
         return idx;
     }
@@ -430,13 +430,15 @@ test "layout" {
     var known_int = int;
     known_int.decorators.@"comptime" = true;
 
-    // functions and function pointers share an entry
+    // a function is the compiler's representation of one; a function pointer is an address
     const f = try t.add(std.testing.allocator, &m, .{ .@"fn" = &.{ int, int } });
-    const fnptr: Type = .{ .raw = f, .decorators = .{ .@"comptime" = false, .@"&" = false, .decor = @intCast(plain) } };
+    const function: Type = .{ .raw = f, .decorators = .{ .@"comptime" = false, .@"&" = false, .decor = @intCast(plain) } };
+    try std.testing.expectEqual(@sizeOf(FunctionHandle), (try function.layout(&m, &t)).?.size);
+    try std.testing.expect(t.get(f) == .@"fn");
+    const p = try t.add(std.testing.allocator, &m, .{ .fnptr = &.{ int, int } });
+    const fnptr: Type = .{ .raw = p, .decorators = .{ .@"comptime" = false, .@"&" = false, .decor = @intCast(plain) } };
     try std.testing.expectEqual(@sizeOf(*const fn () callconv(.c) void), (try fnptr.layout(&m, &t)).?.size);
-    var function = fnptr;
-    function.decorators.@"comptime" = true;
-    try std.testing.expectError(error.Unimplemented, function.layout(&m, &t));
+    try std.testing.expect(t.get(p) == .fnptr);
 
     // { char; int; comptime int; fn pointer }: the comptime member takes no space
     const bytes: [8]u8 = @splat(0);
