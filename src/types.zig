@@ -355,6 +355,7 @@ pub const Type = struct {
 
 /// The types in `_`
 pub const TypeMap = struct {
+    const Self = @This();
     pub const StructMember = struct {
         type: Type,
         value: [*]const u8,
@@ -367,16 +368,16 @@ pub const TypeMap = struct {
 
     const first: u32 = @backingInt(TypeIdx.builtin) + 1;
     entries: std.ArrayList(struct { Entry, Type.LayoutError!Layout }) = .empty,
-    pub const empty: @This() = .{};
-
-    pub fn deinit(self: *@This(), alloc: std.mem.Allocator) void {
+    pub const empty: Self = .{};
+    pub fn deinit(self: *Self, alloc: std.mem.Allocator) void {
         for (self.entries.items) |e| switch (e[0]) {
             .@"struct" => |members| alloc.free(members),
             .@"fn" => |members| alloc.free(members),
         };
         self.entries.deinit(alloc);
     }
-    pub fn add(self: *@This(), alloc: std.mem.Allocator, decors: *const DecorMap, entry: Entry) !TypeIdx {
+
+    pub fn add(self: *Self, alloc: std.mem.Allocator, decors: *const DecorMap, entry: Entry) !TypeIdx {
         const idx: TypeIdx = @fromBackingInt(@intCast(first + @as(u32, @intCast(self.entries.items.len))));
         const l: Type.LayoutError!Layout = switch (entry) {
             .@"fn" => .of(*const fn () callconv(.c) void),
@@ -400,12 +401,12 @@ pub const TypeMap = struct {
         }
         return .{ .size = std.mem.alignForward(usize, size, alignment), .alignment = alignment };
     }
-    pub fn cachedLayout(self: *const @This(), idx: TypeIdx) Type.LayoutError!Layout {
+    pub fn cachedLayout(self: *const Self, idx: TypeIdx) Type.LayoutError!Layout {
         const i = @backingInt(idx);
         std.debug.assert(i >= first);
         return self.entries.items[i - first][1];
     }
-    pub fn get(self: *const @This(), idx: TypeIdx) Entry {
+    pub fn get(self: *const Self, idx: TypeIdx) Entry {
         const i = @backingInt(idx);
         std.debug.assert(i >= first);
         return self.entries.items[i - first][0];

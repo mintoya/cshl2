@@ -34,7 +34,7 @@ pub const SrcRef = struct {
     }
 };
 pub const Ast = union(enum(u8)) {
-    nil: SrcRef,
+    nil: SrcRef, // trailing null in {} is meaning ful, {1;}-> void, {1} 1
     str: SrcRef,
     num: SrcRef,
     id: SrcRef,

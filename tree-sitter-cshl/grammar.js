@@ -35,12 +35,7 @@ module.exports = grammar({
   rules: {
     program: $ => optional(statements($)),
 
-   _expression: $ => choice($._backward, alias($._binding, $.call)),
-    _binding: $ => prec(1, seq(
-      field('argument', $._backward),
-      field('function', choice('<~', '<-')),
-      field('argument', $._expression),
-    )),
+    _expression: $ => $._backward,
 
     _backward: $ => choice($._forward, alias($._backward_call, $.call)),
     _backward_call: $ => prec(1, seq(
@@ -62,19 +57,12 @@ module.exports = grammar({
       field('argument', $._application),
     )),
 
-    _assignment: $ => choice($._function, alias($._assignment_call, $.call), alias($._rest, $.list)),
+    _assignment: $ => choice($._logical, alias($._assignment_call, $.call), alias($._rest, $.list)),
     _rest: $ => seq('~', $._expression),
     _assignment_call: $ => prec(1, seq(
-      field('argument', $._function),
+      field('argument', $._logical),
       field('function', '='),
       field('argument', $._assignment),
-    )),
-
-    _function: $ => choice($._logical, alias($._function_call, $.call)),
-    _function_call: $ => prec(1, seq(
-      field('argument', $._function),
-      field('function', '->'),
-      field('argument', $._logical),
     )),
 
     ...Object.fromEntries(LEVELS.flatMap(([name, operators, associativity], index) => {

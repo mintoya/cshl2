@@ -122,7 +122,7 @@ const Converter = struct {
     fn node(self: Converter, n: ts.TSNode) Error!Ast {
         const sym = ts.ts_node_symbol(n);
         const ids = self.ids;
-        // Anonymous nodes only show up as a call's operator: `+`, `<~`, `.`.
+        // Anonymous nodes only show up as a call's operator: `+`, `<|`, `.`.
         if (!ts.ts_node_is_named(n) or sym == ids.id) return .{ .id = self.ref(n) };
         if (sym == ids.number) return .{ .num = self.ref(n) };
         if (sym == ids.string) {
@@ -192,7 +192,7 @@ test "atoms and lists" {
 
 test "calls put the function first" {
     try expectParse("@bind[x,5]; (x + y) == 11", "({} (@bind x 5) (== ([] (+ x y)) 11))");
-    try expectParse("z <- 0 as i32", "({} (<- z (as 0 i32)))");
+    try expectParse("z <| 0 as i32", "({} (<| z (as 0 i32)))");
     try expectParse("@using @import @path \"lib\"", "({} (@using (@import (@path \"lib\"))))");
     try expectParse("x:add(5) // c\n", "({} ((: x add) 5))");
     try expectParse("@refT@this()", "({} (@refT (@this)))");
@@ -201,7 +201,7 @@ test "calls put the function first" {
 test "syntax errors report a location" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    const file: FileItem = .{ .disk = .{ .filename = "<test>", .content = "x <~ (1, " } };
+    const file: FileItem = .{ .disk = .{ .filename = "<test>", .content = "x <| (1, " } };
     var diag: Diagnostic = .{};
     try std.testing.expectError(error.SyntaxError, parse(arena.allocator(), &file, &diag));
 }

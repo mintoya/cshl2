@@ -4,6 +4,16 @@ def fn = @fn[[a as @ast()], @inlineast(), {
   def rest = @get[a, 1];
   '@fn[`(@get[a, 0]), `(@get[rest, 0]), `(@get[rest, 1])]
 }];
+// fn [...] r body
+// (fn (args (r body)))
+
+// a    : (args (r body))
+// a[0]    : args
+// rest : (r body)
+// rest[0] : r
+// rest[1] : body
+// @fn[args,r,body]
+
 @struct{
   def fn = fn;
 }

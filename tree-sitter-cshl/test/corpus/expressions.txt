@@ -1,9 +1,9 @@
 ==================
-Binding is weakest and right-associative
+Backward pipe is weaker than application and right-associative
 ==================
-x <~ f y;
-a <- b <~ c;
-z <- 0 as i32;
+x <| f y;
+a <| b <| c;
+z <| 0 as i32;
 ---
 
 (program
@@ -72,47 +72,9 @@ a = b = c;
       (id))))
 
 ==================
-Arrow is stronger than application
+Forward pipe is left-associative
 ==================
-[a as i32] -> i32 a + 1;
-(a as i32, b as i32) -> cmp if a>b (x, y);
----
-
-(program
-  (call
-    (call
-      (list
-        (call
-          (id)
-          (id)))
-      (id))
-    (call
-      (id)
-      (number)))
-  (call
-    (call
-      (list
-        (call
-          (id)
-          (id))
-        (call
-          (id)
-          (id)))
-      (id))
-    (call
-      (id)
-      (call
-        (call
-          (id)
-          (id))
-        (list
-          (id)
-          (id))))))
-
-==================
-Arrow is left-associative
-==================
-a -> b -> c;
+a |> b |> c;
 ---
 
 (program
@@ -121,6 +83,20 @@ a -> b -> c;
       (id)
       (id))
     (id)))
+
+==================
+Rest groups an expression as a list
+==================
+f =~g x;
+---
+
+(program
+  (call
+    (id)
+    (list
+      (call
+        (id)
+        (id)))))
 
 ==================
 Operator levels
