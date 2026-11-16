@@ -1,0 +1,53 @@
+@using @import @path "meta.cshl";
+@using @import @path "slice.cshl";
+
+def list =~ fn [T as type] type {
+  @struct{
+    def Self = @this();
+    def RSelf = @refT@this();
+    let mem = slice(T)();
+    let len = 0 as ull;
+    def get = ~fn [] @refT(T);
+    def insert = ~fn [
+      self as RSelf,
+      alloc as any,
+      idx as ull,
+      arr as slice(T)
+    ] void {
+      if (arr.len + self.len) > self.mem.len 
+        self.mem = alloc:resize(self.mem, arr.len + self.len);
+      let back   = self.mem:sub[idx, self.len];
+      def backto = self.mem:sub[idx + arr.len, self.len + arr.len];
+      backto:cpy(back);
+      back.len = arr.len;
+      back:cpy(arr); // not move safe yet
+      self.len = self.len + arr.len;
+    };
+    def pushSlice =~ fn [
+      self as RSelf,
+      alloc as any,
+      arr as slice(T)
+    ] void self:insert[alloc,self.len,arr];
+    def pushArr =~ fn [
+      self as RSelf,
+      alloc as any,
+      item as any
+    ] void self:insert[alloc,self.len,slice(T).of(item)];
+    def push =~ fn [
+      self as RSelf,
+      alloc as any,
+      item as T
+    ] void self:insert[alloc,self.len,slice(T).of{
+      let _ = @arr(1,T)();
+      @get[_,0] = item;
+      _
+    }];
+  }
+};
+
+let x = list[ic]();
+@using @import @path "allocator.cshl";
+x:pushArr(
+  c_runtime_allocator,
+  "hello world\0"
+);

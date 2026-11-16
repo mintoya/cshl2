@@ -1,14 +1,23 @@
 @using @import @path "bind.cshl";
+@using @import @path "fn.cshl";
 @struct{
   def loop    = @loop;
-  def loop    = @thisloop();
+  def thisloop    = @thisloop;
   def repeat  = @repeat;
   def struct  = @struct;
   def true    = (1 == 1);
   def false   = (1 != 1);
+  def typeof  = @typeof;
+  def sizeof  = @sizeof;
+  def comptime  = @comptime;
+  def min =~ fn [a as any, b as @typeof(a)] @typeof(a) ~
+    if a < b (a,b);
+  def max =~ fn [a as any, b as @typeof(a)] @typeof(a) ~
+    if a > b (a,b);
   @using @import @path "fn.cshl";
   @using @import @path "if.cshl";
   @using @import @path "match.cshl";
   @using @import @path "optional.cshl";
   @using @import @path "types.cshl";
+  @using @import @path "bind.cshl";
 }

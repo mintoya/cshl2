@@ -9,7 +9,23 @@
   '(@bind[`name, @at@alloca[@typeof(`value)]] = `value)
 }]];
 
+def rp = @fn[[
+  a as @ast(),
+  b as @ast()
+],@inlineast(),'{
+  @bind[_,`a];
+  {`b}
+}];
+def lp = @fn[[
+  a as @ast(),
+  b as @ast()
+],@inlineast(),'(
+  (`@id("|>"))(`b,`a)
+)];
+
 @struct{
   def def = def;
   def let = let;
+  `'(def `@id("|>") = rp);
+  `'(def `@id("<|") = lp);
 }
