@@ -27,10 +27,8 @@ def slice =~ fn [T as type] type {
       def reverse = (self.ptr as ull) > (b.ptr as ull);
       def max = min(self.len, b.len);
       loop if place < max {
-        if reverse (
-          self:get[place] = b:get[place],
-          self:get[max - 1 - place] = b:get[max - 1 - place];
-        );
+        if reverse (max - 1 - place, place);
+          |> self:get[_] = b:get[_];
         place = place + 1;
         @repeat();
       };

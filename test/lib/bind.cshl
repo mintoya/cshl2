@@ -11,15 +11,14 @@ def rp = @fn[[
   a as @ast(),
   b as @ast()
 ],@inlineast(),'{
-  @bind[_,`a];
-  {`b}
+  @bind[_,`a]; {`b}
 }];
 def lp = @fn[[
   a as @ast(),
   b as @ast()
-],@inlineast(),'(
-  (`@id("|>"))(`b,`a)
-)];
+],@inlineast(),'{
+  @bind[_,`b]; {`a}
+}];
 
 @struct{
   def def = def;

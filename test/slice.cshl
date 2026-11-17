@@ -1,0 +1,17 @@
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/slice.cshl";
+
+def ctsull  =~ comptime slice(comptime ull);
+def ull3    =~ comptime @arr[3,comptime ull]|();
+@get[ull3,0] = 5;
+@get[ull3,1] = 10;
+@get[ull3,2] = 20;
+let x = ctsull();
+x.ptr = _ as @typeof(x.ptr) <|
+  @where ull3;
+x.len = @len[ull3];
+
+(x.len == 3) and
+(x:get[0] == 5) and 
+(x:get[1] == 10) and 
+(x:get[2] == 20)
