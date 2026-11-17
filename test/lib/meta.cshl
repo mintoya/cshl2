@@ -3,6 +3,7 @@
 @struct{
   def loop    = @loop;
   def thisloop    = @thisloop;
+  def defer   = @defer;
   def repeat  = @repeat;
   def struct  = @struct;
   def true    = (1 == 1);

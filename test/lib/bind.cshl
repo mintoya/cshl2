@@ -4,9 +4,7 @@
 }]];
 @bind[let, @fn[[a as @ast()], @inlineast(), {
   @if[@ast_stringeq(@get[a, 0], "=") == (0 == 1), @compileError("expected let name = value")];
-  @bind[name, @get[a, 1]];
-  @bind[value, @get[a, 2]];
-  '(@bind[`name, @at@alloca[@typeof(`value)]] = `value)
+  '@bind[`@get[a, 1],@at@where(`@get[a, 2])]
 }]];
 
 def rp = @fn[[

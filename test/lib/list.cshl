@@ -10,7 +10,7 @@ def list =~ fn [T as type] type {
     def get = ~fn [] @refT(T);
     def insert = ~fn [
       self as RSelf,
-      alloc as any,
+      alloc as anyref,
       idx as ull,
       arr as slice(T)
     ] void {
@@ -25,17 +25,20 @@ def list =~ fn [T as type] type {
     };
     def pushSlice =~ fn [
       self as RSelf,
-      alloc as any,
+      alloc as anyref,
       arr as slice(T)
     ] void self:insert[alloc,self.len,arr];
     def pushArr =~ fn [
       self as RSelf,
       alloc as any,
       item as any
-    ] void self:insert[alloc,self.len,slice(T).of(item)];
+    ] void {
+      let tmp = item;
+      self:insert[alloc,self.len,slice(T).of(tmp)];
+    };
     def push =~ fn [
       self as RSelf,
-      alloc as any,
+      alloc as anyref,
       item as T
     ] void self:insert[alloc,self.len,slice(T).of{
       let _ = @arr(1,T)();
@@ -45,9 +48,14 @@ def list =~ fn [T as type] type {
   }
 };
 
-let x = list[ic]();
 @using @import @path "allocator.cshl";
+let x = list[ic]();
 x:pushArr(
   c_runtime_allocator,
   "hello world\0"
 );
+
+@cinclude "stdio.h";
+fn [i as @ptr(any)] void 
+  @cexpr[void, "puts((const char*)a0)"]
+|> _(@where x.mem:get(0));

@@ -1,2 +1,0 @@
-// error: doesn't match
-5 as @refT(@any())

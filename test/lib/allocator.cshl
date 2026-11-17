@@ -42,18 +42,22 @@ def allocator = @struct{
 def discard =~ fn [id as ast] inline '{ def _ = `id; };
 let c_runtime_allocator = { 
   let tmp = allocator();
-  tmp.func =~ fn [
-    _unused as @refT(allocator),
-    mem     as @ptr(uc),
-    from    as ull,
-    to      as ull,
-  ] @ptr(uc) {
-    discard mem; discard from; discard to;
-    @cexpr[@ptr(uc),"realloc(a1,a3)"] 
-  };
+  tmp.func =~ _ as  @typeof(tmp.func) 
+    <|~ fn [
+      _unused as @refT(allocator),
+      mem     as @ptr(uc),
+      from    as ull,
+      to      as ull,
+    ] @ptr(uc) {
+      discard mem; discard from; discard to;
+      @cexpr[@ptr(uc),"realloc(a1,a3)"] 
+    };
   tmp
 };
 
-@struct{
-  let c_runtime_allocator = c_runtime_allocator;
-}
+let exports = (@struct{
+  let c_runtime_allocator = allocator();
+})();
+exports.c_runtime_allocator 
+  = c_runtime_allocator;
+exports

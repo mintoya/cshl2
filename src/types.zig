@@ -100,7 +100,6 @@ pub const BuiltinTypes = enum(u8) {
     at, // (V) make a pointer to a referance to ti's pointee
     comptime_alloc,
     comptime_free,
-    stackptr,
     zero,
     len,
     get,

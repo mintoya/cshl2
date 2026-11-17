@@ -1,6 +1,7 @@
 // compiled only
 // a C type, named with @opaqueType, filled in by C
 @using @import @path "lib/bind.cshl";
+@cinclude("<stdio.h>");
 def file = @ptr(@opaqueType("FILE"));
 let out = @cexpr[file, "stdout"];
 out != @cexpr[file, "(FILE *)0"]

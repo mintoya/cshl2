@@ -1,7 +1,4 @@
-@using @import @path "bind.cshl";
-@using @import @path "fn.cshl";
-@using @import @path "if.cshl";
-@using @import @path "types.cshl";
+@using @import @path "meta.cshl";
 
 def slice =~ fn [T as type] type {
   def S = @struct{
@@ -25,10 +22,10 @@ def slice =~ fn [T as type] type {
       result.ptr = @where(array) as @typeof(result.ptr);
       result 
     };
-    def cpy =~ fn [self as RSelf , b as Self] void {
-      //should be move or something
+    def cpy =~ fn [self as Self , b as Self] void {
       let place = 0 as ull;
-      @loop if ((place < self.len) and (place < b.len)) {
+      def reverse = (self.ptr as ull) > (b.ptr as ull);
+      loop if place < min(self.len, b.len) {
         self:get[place] = b:get[place];
         place = place + 1;
         @repeat();
