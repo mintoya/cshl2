@@ -25,8 +25,12 @@ def slice =~ fn [T as type] type {
     def cpy =~ fn [self as Self , b as Self] void {
       let place = 0 as ull;
       def reverse = (self.ptr as ull) > (b.ptr as ull);
-      loop if place < min(self.len, b.len) {
-        self:get[place] = b:get[place];
+      def max = min(self.len, b.len);
+      loop if place < max {
+        if reverse (
+          self:get[place] = b:get[place],
+          self:get[max - 1 - place] = b:get[max - 1 - place];
+        );
         place = place + 1;
         @repeat();
       };

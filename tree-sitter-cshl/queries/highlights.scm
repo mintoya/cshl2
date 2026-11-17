@@ -33,5 +33,8 @@
 ; ~ groups the rest of the expression
 "~" @punctuation.special
 
+; | closes the left application chain; adjacent brackets supply arguments.
+["|" "|(" "|["] @punctuation.special
+
 ["(" ")" "[" "]" "{" "}"] @punctuation.bracket
 ["," ";" "." ":"] @punctuation.delimiter

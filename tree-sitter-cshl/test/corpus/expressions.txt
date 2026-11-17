@@ -99,6 +99,49 @@ f =~g x;
         (id)))))
 
 ==================
+Separated calls group both sides and associate left
+==================
+a | b c;
+a b | c d;
+a b | c d | e;
+---
+
+(program
+  (call (id) (call (id) (id)))
+  (call (call (id) (id)) (call (id) (id)))
+  (call (call (call (id) (id)) (call (id) (id))) (id)))
+
+==================
+Separated calls spread adjacent brackets only
+==================
+a b |(c, d,);
+a b |();
+a b |[c, d];
+a b | (c, d);
+a b |((c, d));
+---
+
+(program
+  (call (call (id) (id)) (id) (id))
+  (call (call (id) (id)))
+  (call (call (id) (id)) (id) (id))
+  (call (call (id) (id)) (list (id) (id)))
+  (call (call (id) (id)) (list (id) (id))))
+
+==================
+Separated calls bind more tightly than pipes
+==================
+a b | c d |> e;
+a |> b c | d;
+a <| b c | d;
+---
+
+(program
+  (call (call (call (id) (id)) (call (id) (id))) (id))
+  (call (id) (call (call (id) (id)) (id)))
+  (call (id) (call (call (id) (id)) (id))))
+
+==================
 Operator levels
 ==================
 a and b == c band d shl e + f * g as h;

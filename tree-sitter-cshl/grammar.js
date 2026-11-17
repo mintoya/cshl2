@@ -44,11 +44,23 @@ module.exports = grammar({
       field('argument', $._backward),
     )),
 
-    _forward: $ => choice($._application, alias($._forward_call, $.call)),
+    _forward: $ => choice($._separated, alias($._forward_call, $.call)),
     _forward_call: $ => prec(1, seq(
       field('argument', $._forward),
       field('function', '|>'),
-      field('argument', $._application),
+      field('argument', $._separated),
+    )),
+
+    // Close the application chain on the left, then call it with the right.
+    // a b | c d is (a(b))(c(d)); adjacent brackets supply call arguments.
+    _separated: $ => choice($._application, alias($._separated_call, $.call)),
+    _separated_call: $ => prec.left(2, seq(
+      field('function', $._separated),
+      choice(
+        seq('|', field('argument', $._application)),
+        seq('|(', optional(args($)), ')'),
+        seq('|[', optional(args($)), ']'),
+      ),
     )),
 
     _application: $ => choice($._assignment, $.call),
