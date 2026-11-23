@@ -86,31 +86,35 @@ pub const BuiltinTypes = enum(u8) {
     @"comptime", // (T) compile time version of type T
     @"const", // (T) constant version of type T
     @"volatile", // (T) volatile verison of type T
+    restrict, // (T) restrict verison of type T
     @"struct", // (B) creates namespace for  B, whatever is boudn to a referance becomes a runtime sized member of result type, otherwise, it's a compile time member, see @bind and bind.cshl
     this, // () within a struct, refers to the  type being created
     opaqueType, // (str) type of a c type with the name str
-    @"fn", // ((..A),R) type of  function that takes args ..A and returns R, if R is comptime it's cached and dnoesnt run if the args match, if R is volatile , it always runs, useful for things like compile time maps of type to something else
+    @"fn", // ([..params],R,body) a function; params are `name as T`. if R is comptime it's cached and doesnt run if the args match, if R is volatile , it always runs, useful for things like compile time maps of type to something else
     returntype, //()  type of currrent function's result, not allowed  for a function that retuns any (as that is circular dependancy)
     @"if", //
-    loop, // (B) create loop context, returns loop nestedness,
+    loop, // (B) create loop context, runs B until it doesn't @repeat; gives B's last value
+    thisloop, // () the enclosing loop's nestedness, for @repeat
     repeat, // (?) repeat loop, if calleed  with id, then use nestedness to determine which loop to repeat
     @"defer",
+    whendone, // (B) runs B once the top level is done, before main is lowered: compile-time code, in the scope it's written in
     yield,
     where, // (V) take address of V
     at, // (V) make a pointer to a referance to ti's pointee
-    comptime_alloc,
-    comptime_free,
+    alloca, // (T) storage for a T, zeroed: at runtime in runtime code; gives a pointer
+    alloc, // (T) compile time storage for a T, zeroed; gives a pointer
+    free, // (P) frees what @alloc gave
     zero,
     len,
     get,
-    ast_stringeq,
+    ast_stringeq, // (ast, str) whether the ast's text is str
+    ast_string, // (ast) the ast's text: an atom's own, a call as (f a b)
     apply,
     gensym, // (id) generates ast that is an identifer based on id and something else
     id, // (str) generatie ast identifer of the string
     compileError, // (str) generate compiel error who's content is str
     compiles, // (B) check if what's passed in
     log,
-    raw,
     typeof,
     sizeof,
     alignof,
@@ -121,9 +125,13 @@ pub const BuiltinTypes = enum(u8) {
     fieldtype,
     //
     isptr,
+    isarray, // (T or value) whether it is an @arr[N, T] (not a pointer to one)
+    isstruct, // (T or value) whether it is a @struct (not a pointer to one)
+    isfnptr, // (T or value) whether it is a @fnptr (not a pointer to one)
     isreferance,
     isconst,
     isvolatile,
+    isrestrict,
     iscomptime,
     //
     import,
@@ -157,22 +165,42 @@ pub const BuiltinTypes = enum(u8) {
     @"=",
     @".",
     @":",
-    @"|>",
 };
 const List = std.ArrayList;
 const SGList = @import("sglist.zig").SgList;
-pub const Decor = enum(u8) { @"const", @"volatile", @"*", null };
+pub const Decor = packed struct {
+    @"const": bool = false,
+    @"volatile": bool = false,
+    // @"atomic": bool, // c11
+    @"*": enum(u2) {
+        restrict = 2,
+        default = 1,
+        value = 0,
+    } = .value,
+    pub fn len(self: *const @This()) usize {
+        var result: usize = 0;
+        while (@as([*]const Decor, @ptrCast(self))[result].@"*" != .value) {
+            result = result + 1;
+        }
+        return result + 1;
+    }
+    pub fn toSlice(self: *const @This()) []const Decor {
+        const levels: [*]const Decor = @ptrCast(self);
+        return levels[0..self.len()];
+    }
+};
+pub const DecorIdx = u30;
 pub const DecorMap = struct {
     map: std.ArrayHashMapUnmanaged(
         []const Decor,
-        u30,
+        DecorIdx,
         struct {
             pub fn hash(self: @This(), K: []const Decor) u32 {
                 _ = self;
-                return @truncate(std.hash.Wyhash.hash(
-                    0,
-                    @as([*]const u8, @ptrCast(K.ptr))[0 .. @sizeOf(Decor) * K.len],
-                ));
+                // the bits of each entry: its bytes can have padding
+                var h = std.hash.Wyhash.init(0);
+                for (K) |d| h.update(&.{@as(u8, @as(@typeInfo(Decor).@"struct".backing_integer.?, @bitCast(d)))});
+                return @truncate(h.final());
             }
             pub fn eql(self: @This(), a: []const Decor, b: []const Decor, b_index: usize) bool {
                 _ = self;
@@ -189,114 +217,50 @@ pub const DecorMap = struct {
         self.map.deinit(alloc);
     }
 
-    fn normalize(k: *[]Decor) void {
-        const s = k.*;
-        var out: usize = 0;
-        var i: usize = 0;
-        while (i < s.len) {
-            var c = false;
-            var v = false;
-            while (i < s.len and s[i] != .@"*") : (i += 1) switch (s[i]) {
-                .@"const" => c = true,
-                .@"volatile" => v = true,
-                .@"*", .null => unreachable,
-            };
-            if (c) {
-                s[out] = .@"const";
-                out += 1;
-            }
-            if (v) {
-                s[out] = .@"volatile";
-                out += 1;
-            }
-            if (i < s.len) {
-                s[out] = .@"*";
-                out += 1;
-                i += 1;
-            }
-        }
-        k.* = s[0..out];
-    }
     pub fn getOrSet(
         self: *@This(),
         alloc: std.mem.Allocator,
-        key: [*:.null]const Decor,
-    ) !u30 {
-        const owned = try alloc.dupe(Decor, std.mem.span(key));
-        defer alloc.free(owned);
-        var k = owned;
-        normalize(&k);
-
-        if (self.map.get(k)) |v| return v;
-
-        const new = try self.list.getContiguous(alloc, k.len + 1);
-        const res: u30 = @intCast(self.list.len - new.len);
-        @memcpy(new[0..k.len], k);
-        new[k.len] = .null;
-        try self.map.put(alloc, new[0..k.len], res);
+        key: []const Decor,
+    ) !DecorIdx {
+        std.debug.assert(key.len != 0 and key[0].len() == key.len);
+        if (self.map.get(key)) |v| return v;
+        const new = try self.list.getContiguous(alloc, key.len);
+        const res: DecorIdx = @intCast(self.list.len - new.len);
+        @memcpy(new, key);
+        try self.map.put(alloc, new, res);
         return res;
     }
-    pub fn asSliceTemp(
-        self: @This(),
-        val: u30,
-    ) [*:.null]const Decor {
-        return @ptrCast(self.list.getConst(val));
+    pub fn asSlice(
+        self: *const @This(),
+        val: DecorIdx,
+    ) []const Decor {
+        const first: *const Decor = @ptrCast(self.list.getConst(val));
+        return first.toSlice();
     }
 };
 test "decor map" {
+    const a = std.testing.allocator;
     var m = DecorMap.empty;
-    defer m.deinit(std.testing.allocator);
+    defer m.deinit(a);
 
-    const plain_decor = try m.getOrSet(
-        std.testing.allocator,
-        &[_:.null]Decor{},
-    );
-    try std.testing.expectEqual(
-        plain_decor,
-        try m.getOrSet(
-            std.testing.allocator,
-            &[_:.null]Decor{},
-        ),
-    );
-    const volatile_const_pointer = try m.getOrSet(
-        std.testing.allocator,
-        &[_:.null]Decor{ .@"volatile", .@"const", .@"*" },
-    );
-    try std.testing.expectEqual(
-        volatile_const_pointer,
-        try m.getOrSet(
-            std.testing.allocator,
-            &[_:.null]Decor{ .@"volatile", .@"const", .@"*" },
-        ),
-    );
-    try std.testing.expectEqualSlices(Decor, &.{}, std.mem.span(m.asSliceTemp(plain_decor)));
-    try std.testing.expectEqualSlices(
-        Decor,
-        &.{ .@"const", .@"volatile", .@"*" },
-        std.mem.span(m.asSliceTemp(volatile_const_pointer)),
-    );
-    // every spelling of the same qualifiers is the same type
-    try std.testing.expectEqual(
-        volatile_const_pointer,
-        try m.getOrSet(
-            std.testing.allocator,
-            &[_:.null]Decor{ .@"const", .@"volatile", .@"const", .@"volatile", .@"*" },
-        ),
-    );
-    // but qualifiers on different sides of a * are different levels
-    try std.testing.expect(volatile_const_pointer != try m.getOrSet(
-        std.testing.allocator,
-        &[_:.null]Decor{ .@"volatile", .@"*", .@"const" },
-    ));
+    const plain = try m.getOrSet(a, &.{.{}});
+    try std.testing.expectEqual(plain, try m.getOrSet(a, &.{.{}}));
+    // T * const volatile: a const volatile pointer to a T
+    const cv_pointer = try m.getOrSet(a, &.{ .{ .@"const" = true, .@"volatile" = true, .@"*" = .default }, .{} });
+    try std.testing.expectEqual(cv_pointer, try m.getOrSet(a, &.{ .{ .@"volatile" = true, .@"const" = true, .@"*" = .default }, .{} }));
+    try std.testing.expectEqualSlices(Decor, &.{.{}}, m.asSlice(plain));
+    try std.testing.expectEqualSlices(Decor, &.{ .{ .@"const" = true, .@"volatile" = true, .@"*" = .default }, .{} }, m.asSlice(cv_pointer));
+    // const T *: a pointer to const, not a const pointer
+    try std.testing.expect(cv_pointer != try m.getOrSet(a, &.{ .{ .@"*" = .default }, .{ .@"const" = true } }));
 
-    var buf = [_:.null]Decor{ .@"const", .@"*" };
-    const const_pointer = try m.getOrSet(std.testing.allocator, &buf);
-    buf = .{ .@"*", .@"*" };
-    try std.testing.expectEqual(
-        const_pointer,
-        try m.getOrSet(std.testing.allocator, &[_:.null]Decor{ .@"const", .@"*" }),
-    );
-    try std.testing.expect(const_pointer != try m.getOrSet(std.testing.allocator, &buf));
+    var buf = [_]Decor{ .{ .@"const" = true, .@"*" = .default }, .{} };
+    const const_pointer = try m.getOrSet(a, &buf);
+    buf = .{ .{ .@"*" = .default }, .{} };
+    try std.testing.expectEqual(const_pointer, try m.getOrSet(a, &.{ .{ .@"const" = true, .@"*" = .default }, .{} }));
+    try std.testing.expect(const_pointer != try m.getOrSet(a, &buf));
+    // a restrict pointer isn't a plain one
+    try std.testing.expect(const_pointer != try m.getOrSet(a, &.{ .{ .@"const" = true, .@"*" = .restrict }, .{} }));
+    try std.testing.expectEqual(@as(usize, 2), m.asSlice(try m.getOrSet(a, &.{ .{ .@"*" = .restrict }, .{} })).len);
 }
 
 pub const Layout = struct {
@@ -311,16 +275,14 @@ pub const Type = struct {
     decorators: packed struct {
         @"comptime": bool,
         @"&": bool,
-        decor: u30,
+        decor: DecorIdx,
     },
 
     pub const LayoutError = error{ NoLayout, Unimplemented };
 
     pub fn layout(self: Type, decors: *const DecorMap, types: *const TypeMap) LayoutError!?Layout {
-        for (std.mem.span(decors.asSliceTemp(self.decorators.decor))) |d| switch (d) {
-            .@"*" => return .of(*anyopaque),
-            else => {},
-        };
+        // a level after the pointee's: a pointer
+        if (decors.asSlice(self.decorators.decor).len > 1) return .of(*anyopaque);
         return switch (self.raw) {
             .void => .{ .size = 0, .alignment = 1 },
             .bool => .of(bool),
@@ -340,9 +302,8 @@ pub const Type = struct {
             .inlineast, .ast => .of(@import("ast.zig").Ast),
             .any => return error.NoLayout,
             _ => switch (types.get(self.raw)) {
-                .fnptr => try types.cachedLayout(self.raw),
+                .fnptr, .@"struct", .arr, .@"opaque" => try types.cachedLayout(self.raw),
                 .@"fn" => .of(FunctionHandle),
-                .@"struct" => try types.cachedLayout(self.raw),
             },
         };
     }
@@ -355,11 +316,17 @@ pub const TypeMap = struct {
         type: Type,
         value: [*]const u8,
         name: []const u8,
+        /// a field takes space in every value, with `value` as its default;
+        /// anything else belongs to the type, and `value` is the value
+        field: bool = true,
     };
     pub const Entry = union(enum) {
         @"struct": []const StructMember,
         @"fn": []const Type,
         fnptr: []const Type,
+        arr: struct { len: u64, elem: Type },
+        /// a C type known only by its name
+        @"opaque": []const u8,
     };
 
     const first: u32 = @backingInt(TypeIdx.builtin) + 1;
@@ -370,30 +337,56 @@ pub const TypeMap = struct {
             .@"struct" => |members| alloc.free(members),
             .@"fn" => |members| alloc.free(members),
             .fnptr => |members| alloc.free(members),
+            .@"opaque" => |name| alloc.free(name),
+            .arr => {},
         };
         self.entries.deinit(alloc);
     }
 
     pub fn add(self: *Self, alloc: std.mem.Allocator, decors: *const DecorMap, entry: Entry) !TypeIdx {
         const idx: TypeIdx = @fromBackingInt(@intCast(first + @as(u32, @intCast(self.entries.items.len))));
-        const l: Type.LayoutError!Layout = switch (entry) {
-            .@"fn" => .of(FunctionHandle),
-            .fnptr => .of(*fn () callconv(.c) void),
-            .@"struct" => |members| structLayout(members, decors, self),
-        };
         try self.entries.ensureUnusedCapacity(alloc, 1);
-        self.entries.appendAssumeCapacity(.{ switch (entry) {
+        self.entries.appendAssumeCapacity(.{ try owned(alloc, entry), entryLayout(entry, decors, self) });
+        return idx;
+    }
+    pub fn set(self: *Self, alloc: std.mem.Allocator, decors: *const DecorMap, idx: TypeIdx, entry: Entry) !void {
+        const i = @backingInt(idx) - first;
+        const new = try owned(alloc, entry);
+        switch (self.entries.items[i][0]) {
+            .@"struct" => |members| alloc.free(members),
+            .@"fn" => |members| alloc.free(members),
+            .fnptr => |members| alloc.free(members),
+            .@"opaque" => |name| alloc.free(name),
+            .arr => {},
+        }
+        self.entries.items[i] = .{ new, entryLayout(new, decors, self) };
+    }
+    fn owned(alloc: std.mem.Allocator, entry: Entry) !Entry {
+        return switch (entry) {
             .@"struct" => |members| .{ .@"struct" = try alloc.dupe(StructMember, members) },
             .@"fn" => |members| .{ .@"fn" = try alloc.dupe(Type, members) },
             .fnptr => |members| .{ .fnptr = try alloc.dupe(Type, members) },
-        }, l });
-        return idx;
+            .@"opaque" => |name| .{ .@"opaque" = try alloc.dupe(u8, name) },
+            .arr => entry,
+        };
+    }
+    fn entryLayout(entry: Entry, decors: *const DecorMap, types: *const TypeMap) Type.LayoutError!Layout {
+        return switch (entry) {
+            .@"fn" => .of(FunctionHandle),
+            .fnptr => .of(*fn () callconv(.c) void),
+            .@"struct" => |members| structLayout(members, decors, types),
+            .@"opaque" => error.NoLayout,
+            .arr => |a| blk: {
+                const l = (try a.elem.layout(decors, types)).?;
+                break :blk .{ .size = l.size * a.len, .alignment = l.alignment };
+            },
+        };
     }
     fn structLayout(members: []const StructMember, decors: *const DecorMap, types: *const TypeMap) Type.LayoutError!Layout {
         var size: usize = 0;
         var alignment: u16 = 1;
         for (members) |m| {
-            if (m.type.decorators.@"comptime") continue;
+            if (!m.field or m.type.decorators.@"comptime") continue;
             const l = (try m.type.layout(decors, types)).?;
             size = std.mem.alignForward(usize, size, l.alignment) + l.size;
             alignment = @max(alignment, l.alignment);
@@ -414,8 +407,8 @@ pub const TypeMap = struct {
 test "layout" {
     var m = DecorMap.empty;
     defer m.deinit(std.testing.allocator);
-    const plain = try m.getOrSet(std.testing.allocator, &[_:.null]Decor{});
-    const const_ptr = try m.getOrSet(std.testing.allocator, &[_:.null]Decor{ .@"const", .@"*" });
+    const plain = try m.getOrSet(std.testing.allocator, &.{.{}});
+    const const_ptr = try m.getOrSet(std.testing.allocator, &.{ .{ .@"const" = true, .@"*" = .default }, .{} });
 
     var t = TypeMap.empty;
     defer t.deinit(std.testing.allocator);
@@ -456,3 +449,14 @@ test "layout" {
 }
 
 pub const Value = struct { T: Type, mem: [*]u8 };
+test "Decor len and toSlice" {
+    const d = [_]Decor{
+        .{ .@"const" = true, .@"volatile" = false, .@"*" = .default },
+        .{ .@"const" = false, .@"volatile" = true, .@"*" = .default },
+        .{ .@"const" = false, .@"volatile" = false, .@"*" = .value },
+    };
+    try std.testing.expectEqual(@as(usize, 3), d[0].len());
+    try std.testing.expectEqual(@as(usize, 1), d[2].len());
+    try std.testing.expectEqual(@as(usize, 3), d[0].toSlice().len);
+    try std.testing.expect(d[1].toSlice()[0].@"volatile");
+}

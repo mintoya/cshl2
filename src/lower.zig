@@ -33,6 +33,8 @@ const Scope = struct {
 };
 pub const State = struct {
     typemap: TypeMap = .empty,
+    rom: List(u8) = .empty,
+    //ram : List(u8),
     functions: List(Function) = .empty,
     place: *Scope,
 };

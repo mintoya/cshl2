@@ -131,14 +131,16 @@ const Converter = struct {
             r.len -= 2;
             return .{ .str = r };
         }
-        if (sym == ids.list) return self.sequence(n, list_head);
-        if (sym == ids.block or sym == ids.program) return self.sequence(n, block_head);
+        if (sym == ids.list) return self.sequence(n, list_head, false);
+        if (sym == ids.block or sym == ids.program) return self.sequence(n, block_head, true);
         if (sym == ids.call) return self.call(n);
         std.debug.panic("cshl: unexpected tree-sitter node `{s}`", .{ts.ts_node_type(n)});
     }
 
-    /// (head children...), over the named, non-comment children.
-    fn sequence(self: Converter, n: ts.TSNode, head: Ast) Error!Ast {
+    /// (head children...), over the named, non-comment children. A block
+    /// whose last statement ends in `;` gets a trailing `nul`: `{1;}` is
+    /// void where `{1}` is 1.
+    fn sequence(self: Converter, n: ts.TSNode, head: Ast, block: bool) Error!Ast {
         var items: std.ArrayList(Ast) = .empty;
         errdefer items.deinit(self.gpa);
         try items.append(self.gpa, head);
@@ -148,7 +150,21 @@ const Converter = struct {
             if (ts.ts_node_symbol(child) == self.ids.comment) continue;
             try items.append(self.gpa, try self.node(child));
         }
+        if (block) if (self.trailingSemicolon(n)) |semi| try items.append(self.gpa, .{ .nil = self.ref(semi) });
         return .{ .call = try items.toOwnedSlice(self.gpa) };
+    }
+
+    fn trailingSemicolon(self: Converter, n: ts.TSNode) ?ts.TSNode {
+        var i = ts.ts_node_child_count(n);
+        while (i > 0) {
+            i -= 1;
+            const child = ts.ts_node_child(n, i);
+            if (ts.ts_node_symbol(child) == self.ids.comment) continue;
+            const kind = std.mem.span(ts.ts_node_type(child));
+            if (std.mem.eql(u8, kind, "}")) continue;
+            return if (std.mem.eql(u8, kind, ";")) child else null;
+        }
+        return null;
     }
 
     /// (function arguments...). The fields are in source order, so `a + b`
@@ -188,6 +204,7 @@ fn expectParse(source: []const u8, expected: []const u8) !void {
 
 test "atoms and lists" {
     try expectParse("x; 5; \"hi\\n\"; [a, b]; (a,); {}", "({} x 5 \"hi\\n\" ([] a b) ([] a) ({}))");
+    try expectParse("{1;}; {1}; 2;", "({} ({} 1 nul) ({} 1) 2 nul)");
 }
 
 test "calls put the function first" {
@@ -196,6 +213,13 @@ test "calls put the function first" {
     try expectParse("@using @import @path \"lib\"", "({} (@using (@import (@path \"lib\"))))");
     try expectParse("x:add(5) // c\n", "({} ((: x add) 5))");
     try expectParse("@refT@this()", "({} (@refT (@this)))");
+}
+
+test "~ is the rest, as any right operand" {
+    try expectParse("x as ~f y", "({} (as x ([] (f y))))");
+    try expectParse("a + ~b * c == d", "({} (+ a ([] (== (* b c) d))))");
+    try expectParse("x = ~f y", "({} (= x ([] (f y))))");
+    try expectParse("a + b + c", "({} (+ (+ a b) c))");
 }
 
 test "syntax errors report a location" {

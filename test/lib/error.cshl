@@ -40,8 +40,8 @@ def error =~ fn [name as any] volatile(comptime(code)) {
   };
   found as code
 };
-
-@whendone{ let errorNames = names as list(slice(uc)); };
+let errorNames = list(slice(uc))(); 
+@whendone~errorNames =~names as list(slice(uc));
 def errorName =~ fn [c as code] slice(uc) ~ errorNames:[(c as ull) - 1];
 
 // !(T): a T, or an error code instead. err is 0 when there's a value

@@ -82,10 +82,12 @@ module.exports = grammar({
       const left = $ => associativity === 'none' ? operand($) : $['_' + name];
       return [
         ['_' + name, $ => choice(operand($), alias($['_' + name + '_call'], $.call))],
-        ['_' + name + '_call', $ => prec(1, seq(
+        // right: a ~ operand keeps taking operators, to the end
+        ['_' + name + '_call', $ => prec.right(1, seq(
           field('argument', left($)),
           field('function', choiceOf(operators)),
-          field('argument', operand($)),
+          // ~ takes everything after it, so it can be any right operand
+          field('argument', choice(operand($), alias($._rest, $.list))),
         ))],
       ];
     })),

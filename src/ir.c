@@ -68,6 +68,12 @@ tu_def(
       Reg d;
       ull off;
     }),
+    /*
+    (Ir_ram, struct { //
+      Reg d;
+      ull off;
+    }),
+    */
     (Ir_math, struct { // only integers and pointers
       mathKind op;
       Reg l,
