@@ -7,6 +7,7 @@ test "inc" {
     _ = parse;
     _ = @import("types.zig");
     _ = @import("ir.zig");
+    _ = @import("lower.zig");
 }
 
 pub fn main(init: std.process.Init) !void {
@@ -44,10 +45,7 @@ pub fn main(init: std.process.Init) !void {
             const src = file.bytes();
             const line = std.mem.count(u8, src[0..diag.off], "\n") + 1;
             const col = diag.off - (if (std.mem.lastIndexOfScalar(u8, src[0..diag.off], '\n')) |nl| nl + 1 else 0) + 1;
-            if (diag.missing)
-                std.debug.print("{s}:{d}:{d}: syntax error: missing `{s}`\n", .{ path, line, col, diag.kind })
-            else
-                std.debug.print("{s}:{d}:{d}: syntax error\n", .{ path, line, col });
+            std.debug.print("{s}:{d}:{d}: syntax error: {s}\n", .{ path, line, col, diag.msg });
             std.process.exit(1);
         },
         else => return err,

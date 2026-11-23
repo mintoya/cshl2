@@ -5,7 +5,7 @@ def half =~ fn [n as ii] !ii
     (!ii).ok(n / (2 as ii)),
     (!ii).fail error"Odd");
 
-def quarter =~ fn [n as ii] !ii trying {
+def quarter =~ fn [n as ii] !ii trying{
   try half ~
     try half n
 };

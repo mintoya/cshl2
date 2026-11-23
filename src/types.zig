@@ -98,6 +98,7 @@ pub const BuiltinTypes = enum(u8) {
     repeat, // (?) repeat loop, if calleed  with id, then use nestedness to determine which loop to repeat
     @"defer",
     whendone, // (B) runs B once the top level is done, before main is lowered: compile-time code, in the scope it's written in
+    unfold, // (...) takes a list of expressions and executes them
     yield,
     where, // (V) take address of V
     at, // (V) make a pointer to a referance to ti's pointee
@@ -165,6 +166,7 @@ pub const BuiltinTypes = enum(u8) {
     @"=",
     @".",
     @":",
+    @"{}",
 };
 const List = std.ArrayList;
 const SGList = @import("sglist.zig").SgList;
@@ -189,6 +191,17 @@ pub const Decor = packed struct {
         return levels[0..self.len()];
     }
 };
+test "Decor len and toSlice" {
+    const d = [_]Decor{
+        .{ .@"const" = true, .@"*" = .default },
+        .{ .@"volatile" = true, .@"*" = .default },
+        .{},
+    };
+    try std.testing.expectEqual(@as(usize, 3), d[0].len());
+    try std.testing.expectEqual(@as(usize, 1), d[2].len());
+    try std.testing.expectEqual(@as(usize, 3), d[0].toSlice().len);
+    try std.testing.expect(d[1].toSlice()[0].@"volatile");
+}
 pub const DecorIdx = u30;
 pub const DecorMap = struct {
     map: std.ArrayHashMapUnmanaged(
@@ -280,7 +293,7 @@ pub const Type = struct {
 
     pub const LayoutError = error{ NoLayout, Unimplemented };
 
-    pub fn layout(self: Type, decors: *const DecorMap, types: *const TypeMap) LayoutError!?Layout {
+    pub fn layout(self: Type, decors: *const DecorMap, types: *const TypeMap) LayoutError!Layout {
         // a level after the pointee's: a pointer
         if (decors.asSlice(self.decorators.decor).len > 1) return .of(*anyopaque);
         return switch (self.raw) {
@@ -377,7 +390,7 @@ pub const TypeMap = struct {
             .@"struct" => |members| structLayout(members, decors, types),
             .@"opaque" => error.NoLayout,
             .arr => |a| blk: {
-                const l = (try a.elem.layout(decors, types)).?;
+                const l = (try a.elem.layout(decors, types));
                 break :blk .{ .size = l.size * a.len, .alignment = l.alignment };
             },
         };
@@ -387,7 +400,7 @@ pub const TypeMap = struct {
         var alignment: u16 = 1;
         for (members) |m| {
             if (!m.field or m.type.decorators.@"comptime") continue;
-            const l = (try m.type.layout(decors, types)).?;
+            const l = (try m.type.layout(decors, types));
             size = std.mem.alignForward(usize, size, l.alignment) + l.size;
             alignment = @max(alignment, l.alignment);
         }
@@ -414,9 +427,9 @@ test "layout" {
     defer t.deinit(std.testing.allocator);
 
     const int: Type = .{ .raw = .sint, .decorators = .{ .@"comptime" = false, .@"&" = false, .decor = @intCast(plain) } };
-    try std.testing.expectEqual(@sizeOf(c_int), (try int.layout(&m, &t)).?.size);
+    try std.testing.expectEqual(@sizeOf(c_int), (try int.layout(&m, &t)).size);
     const ptr: Type = .{ .raw = .sint, .decorators = .{ .@"comptime" = false, .@"&" = false, .decor = @intCast(const_ptr) } };
-    try std.testing.expectEqual(@sizeOf(*anyopaque), (try ptr.layout(&m, &t)).?.size);
+    try std.testing.expectEqual(@sizeOf(*anyopaque), (try ptr.layout(&m, &t)).size);
 
     const char: Type = .{ .raw = .schar, .decorators = .{ .@"comptime" = false, .@"&" = false, .decor = @intCast(plain) } };
     var known_int = int;
@@ -425,11 +438,11 @@ test "layout" {
     // a function is the compiler's representation of one; a function pointer is an address
     const f = try t.add(std.testing.allocator, &m, .{ .@"fn" = &.{ int, int } });
     const function: Type = .{ .raw = f, .decorators = .{ .@"comptime" = false, .@"&" = false, .decor = @intCast(plain) } };
-    try std.testing.expectEqual(@sizeOf(FunctionHandle), (try function.layout(&m, &t)).?.size);
+    try std.testing.expectEqual(@sizeOf(FunctionHandle), (try function.layout(&m, &t)).size);
     try std.testing.expect(t.get(f) == .@"fn");
     const p = try t.add(std.testing.allocator, &m, .{ .fnptr = &.{ int, int } });
     const fnptr: Type = .{ .raw = p, .decorators = .{ .@"comptime" = false, .@"&" = false, .decor = @intCast(plain) } };
-    try std.testing.expectEqual(@sizeOf(*const fn () callconv(.c) void), (try fnptr.layout(&m, &t)).?.size);
+    try std.testing.expectEqual(@sizeOf(*const fn () callconv(.c) void), (try fnptr.layout(&m, &t)).size);
     try std.testing.expect(t.get(p) == .fnptr);
 
     // { char; int; comptime int; fn pointer }: the comptime member takes no space
@@ -442,21 +455,10 @@ test "layout" {
     } });
     const st: Type = .{ .raw = s, .decorators = .{ .@"comptime" = false, .@"&" = false, .decor = @intCast(plain) } };
     const Expected = extern struct { c: i8, i: c_int, f: *const fn () callconv(.c) void };
-    const l = (try st.layout(&m, &t)).?;
+    const l = (try st.layout(&m, &t));
     try std.testing.expectEqual(@sizeOf(Expected), l.size);
     try std.testing.expectEqual(@alignOf(Expected), l.alignment);
     try std.testing.expectEqual(f, @as(TypeIdx, @fromBackingInt(@intCast(@backingInt(TypeIdx.builtin) + 1))));
 }
 
 pub const Value = struct { T: Type, mem: [*]u8 };
-test "Decor len and toSlice" {
-    const d = [_]Decor{
-        .{ .@"const" = true, .@"volatile" = false, .@"*" = .default },
-        .{ .@"const" = false, .@"volatile" = true, .@"*" = .default },
-        .{ .@"const" = false, .@"volatile" = false, .@"*" = .value },
-    };
-    try std.testing.expectEqual(@as(usize, 3), d[0].len());
-    try std.testing.expectEqual(@as(usize, 1), d[2].len());
-    try std.testing.expectEqual(@as(usize, 3), d[0].toSlice().len);
-    try std.testing.expect(d[1].toSlice()[0].@"volatile");
-}
