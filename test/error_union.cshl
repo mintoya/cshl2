@@ -1,0 +1,12 @@
+// !(T) is a T or an error code: ok(v) and fail(code) make one, and
+// x:catch{ handler } is x's value, or the handler's, with the code as _
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/error.cshl";
+def half =~ fn [n as ii] !(ii)
+  if (n % (2 as ii)) == (0 as ii)
+    (!(ii).ok(n / (2 as ii)), !(ii).fail(error("Odd")));
+def main =~ fn [] ii {
+  def a = half(8 as ii):catch{ 0 as ii };
+  def b = half(7 as ii):catch{ if _ == error("Odd") (100 as ii, 200 as ii) };
+  (a - (4 as ii)) + (b - (100 as ii))
+};

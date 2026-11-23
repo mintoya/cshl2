@@ -1,0 +1,9 @@
+// error: can't write compile-time storage from under a runtime branch
+// a loop in runtime code (here the top level) is a runtime loop, even when
+// its condition is known: the compiler doesn't repeat code on its own. i is
+// compile-time, so the loop can't count with it. a body written out once per
+// pass is a macro's job, and looks like one
+@using @import @path "lib/meta.cshl";
+let i = 0;
+loop @if[i < 3, { i = i + 1; repeat() }];
+i == 3

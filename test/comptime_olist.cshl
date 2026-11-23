@@ -1,0 +1,17 @@
+// an ordered list of compile-time items: added in any order, kept sorted,
+// all while compiling
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/olist.cshl";
+@using @import @path "lib/allocator.cshl";
+def cull =~ comptime ull;
+let ct = comptime_allocator();
+let xs =~ olist(cull, ascending)|();
+xs:add(ct, 5 as cull);
+xs:add(ct, 3 as cull);
+xs:add(ct, 9 as cull);
+xs:add(ct, 1 as cull);
+xs:add(ct, 5 as cull);
+(xs.items.len == 5)
+  and (xs:get(0) == 1) and (xs:get(1) == 3) and (xs:get(2) == 5)
+  and (xs:get(3) == 5) and (xs:get(4) == 9)
+  and xs:has(9) and xs:has(1) and (xs:has(4) == false) and (xs:has(0) == false)

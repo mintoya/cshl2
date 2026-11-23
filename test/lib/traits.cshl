@@ -1,0 +1,134 @@
+@using @import @path "meta.cshl";
+@using @import @path "list.cshl";
+def allocators =~ @import @path "allocator.cshl";
+
+let ct = allocators.comptime_allocator();
+def VC = ~ fn [T as type] type ~ volatile(comptime(T));
+def Fn = typeof(fn [] void {});
+
+// a and b joined, in compile-time storage
+def join =~ fn [a as any, b as any] any {
+  def s = @at(@alloc[@arr[@len(a) + @len(b), uc]]);
+  let i = 0;
+  @loop @if[i < @len(a), { @get[s, i] = @get[a, i]; i = i + 1; @repeat() }];
+  i = 0;
+  @loop @if[i < @len(b), { @get[s, @len(a) + i] = @get[b, i]; i = i + 1; @repeat() }];
+  s
+};
+
+// the name of a trait, its requirements and its defaults, both given Self
+def trait =~ fn [name as any, reqs as any, defaults as any] type struct{
+  def label = name as any;
+  def requires = reqs as any;
+  def provides = defaults as any;
+};
+
+// what's implemented for what, and which traits need which
+def ImplE = @struct{ let tr = @void(); let t = @void(); let m = @void(); };
+def SuperE = @struct{ let sub = @void(); let sup = @void(); };
+let impls = list(ImplE)();
+let supers = list(SuperE)();
+
+// whether M names n, and what it names
+def has_member =~ fn [M as type, n as any] VC(bool) ~
+  @compiles(` '((`@id("."))(M, `@id(n))));
+def member =~ fn [M as type, n as any] volatile(Fn) ~
+  (` '((`@id("."))(M, `@id(n))));
+
+// where T's impl of tr is in impls, or impls.len
+def find =~ fn [T as type, tr as type] VC(ull) {
+  let found = impls.len as comptime(ull);
+  let i = 0 as comptime(ull);
+  loop if i < impls.len {
+    def e = impls:get(i);
+    if (e.t == T) and (e.tr == tr) (found = i);
+    i = i + 1;
+    @repeat();
+  };
+  found
+};
+def implements =~ fn [T as type, tr as type] VC(bool) ~
+  find(T, tr) != impls.len;
+
+// a bound: a compile error unless T implements tr
+def require =~ fn [T as type, tr as type] VC(void)
+  if implements(T, tr) == false
+    @compileError(join(tr.label, " isn't implemented for this type"));
+
+// sub needs sup: implementing sub for a type needs sup implemented first
+def extends =~ fn [sub as type, sup as type] VC(void) {
+  let e = SuperE();
+  e.sub = sub;
+  e.sup = sup;
+  supers:push(ct, e);
+};
+
+// whether f has the parameters and result of the prototype p; @any() on
+// either side matches anything
+def fits =~ fn [f as any, p as any] VC(bool) {
+  let ok = (1 == 1) as comptime(bool);
+  let i = 0;
+  loop if @compiles(@fieldtype(p, i)) {
+    if @compiles(@fieldtype(f, i)) ({
+      def want = @fieldtype(p, i);
+      def got = @fieldtype(f, i);
+      if (got != want) and (got != @any()) and (want != @any()) (ok = (1 != 1));
+    }, ok = (1 != 1));
+    i = i + 1;
+    @repeat();
+  };
+  // and no more parameters than p
+  if @compiles(@fieldtype(f, i)) (ok = (1 != 1));
+  ok
+};
+
+// tr for T, by the methods in M: checked the way a compiler checks an impl
+def impl =~ fn [tr as type, T as type, M as type] VC(void) {
+  if implements(T, tr)
+    @compileError(join(tr.label, " is already implemented for this type"));
+  let i = 0 as comptime(ull);
+  loop if i < supers.len {
+    def s = supers:get(i);
+    if (s.sub == tr) and (implements(T, s.sup) == false)
+      @compileError(join(join(join("implementing ", tr.label), " needs "), s.sup.label));
+    i = i + 1;
+    @repeat();
+  };
+  def R = tr.requires(T);
+  def D = tr.provides(T);
+  let k = 0;
+  loop if @compiles(@fieldname(R, k)) {
+    def n = @fieldname(R, k);
+    def own = has_member(M, n);
+    if (own or has_member(D, n)) == false
+      @compileError(join(join(join(tr.label, " needs "), n), ", and this impl doesn't have it"));
+    if own (if fits(member(M, n), @fieldval(R, k)) == false
+      @compileError(join(join(join(tr.label, "'s "), n), " doesn't have the signature the trait gives it")));
+    k = k + 1;
+    @repeat();
+  };
+  let e = ImplE();
+  e.tr = tr;
+  e.t = T;
+  e.m = M;
+  impls:push(ct, e);
+};
+
+// T's n from its impl of tr, or tr's default
+def method =~ fn [tr as type, T as type, n as any] volatile(Fn) {
+  require(T, tr);
+  def M = impls:get(find(T, tr)).m;
+  def D = tr.provides(T);
+  if has_member(M, n) (member(M, n),
+    if has_member(D, n) (member(D, n),
+      @compileError(join(join(tr.label, " has no "), n))))
+};
+
+struct{
+  def trait = trait;
+  def impl = impl;
+  def extends = extends;
+  def implements = implements;
+  def require = require;
+  def method = method;
+}

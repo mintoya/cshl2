@@ -1,0 +1,11 @@
+// error: only scalars compare there
+// what == means for a struct is up to the language (an Eq impl): at runtime
+// the compiler only compares scalars. known structs still compare by content
+@using @import @path "lib/meta.cshl";
+def P = @struct{ let x = 0 as ii; };
+def f =~ fn [a as P, b as P] bool ~ (a == b);
+def main = ~ fn [n as ii, v as @ptr@ptr[ic]] ii {
+  f(P(), P());
+  0 as ii
+};
+true

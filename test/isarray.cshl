@@ -1,0 +1,8 @@
+// @isarray: an array type or a value of one; a pointer to one isn't
+@bind[A, @arr[3, @sint()]];
+@bind[xs, @at@alloca[A]];
+@isarray(A) and @isarray(xs) and @isarray("str")
+  and (@isarray(@ptr(A)) == (1 != 1))
+  and (@isarray(@where(xs)) == (1 != 1))
+  and (@isarray(@sint()) == (1 != 1))
+  and (@isarray(5) == (1 != 1))

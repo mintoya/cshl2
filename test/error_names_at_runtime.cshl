@@ -1,0 +1,14 @@
+// errorName works on a code only known at runtime, for every error the top
+// level used, including ones used after errorName was written
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/slice.cshl";
+@using @import @path "lib/error.cshl";
+def first = error"First";
+def name =~ fn [c as code] slice(uc) ~ errorName(c);
+def second = error"Second!";
+def main =~ fn [argc as ii, argv as ptr(ptr(uc))] ii {
+  // argc is 1: first and second's codes, from runtime values
+  def a = name((argc as code) + (first - (1 as code)));
+  def b = name((argc as code) + (second - (1 as code)));
+  if (a.len == (5 as ull)) and (b.len == (7 as ull)) (0 as ii, 1 as ii)
+};

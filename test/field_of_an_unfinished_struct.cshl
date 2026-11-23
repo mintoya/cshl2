@@ -1,0 +1,10 @@
+// error: that struct is still being defined
+// a field's type has to be finished: inside S's block, S isn't yet (its
+// layout isn't known). a pointer to it is fine
+@bind[S, @struct{
+  @bind[Outer, @this()];
+  @bind[n, @at@alloca[@sint()]];
+  @bind[ok, @struct{ @bind[p, @at@alloca[@ptr(Outer)]] }];
+  @bind[bad, @struct{ @bind[s, @at@alloca[Outer]] }];
+}];
+1 == 1

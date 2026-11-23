@@ -1,0 +1,11 @@
+// @isfnptr: a function pointer type or a value of one (null included); not a
+// function, and not a pointer to a function pointer
+@bind[F, @fnptr[[@sint()], @sint()]];
+@bind[f, @fn[[x as @sint()], @sint(), x]];
+@bind[p, @at@alloca[F]];
+p = f as F;
+@isfnptr(F) and @isfnptr(p) and @isfnptr(F())
+  and (@isfnptr(f) == (1 != 1))
+  and (@isfnptr(@ptr(F)) == (1 != 1))
+  and (@isfnptr(@struct{}) == (1 != 1))
+  and (@isfnptr(@sint()) == (1 != 1))

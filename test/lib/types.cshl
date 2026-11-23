@@ -17,6 +17,7 @@ def type  = @type();
   def ic    = @schar()     as type;
 
 
+  def int   = @int()      as type;
   def void  = @void()      as type;
   def any   = @any()       as type;
   def anyref= @refT@any()  as type;

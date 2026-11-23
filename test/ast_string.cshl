@@ -19,6 +19,6 @@ def join =~ fn [a as any, b as any] any {
 @if[@ast_stringeq('x, @ast_string('x)) == (1 == 0), @compileError("atom")];
 
 // T arrives as the syntax the caller wrote
-def needs_impl =~ fn [T as @ast()] @void()
+def needs_impl =~ fn [T as @ast()] @comptime(@void())
   @compileError(join("no impl for ", @ast_string(T)));
 needs_impl(@ptr(@sint()))

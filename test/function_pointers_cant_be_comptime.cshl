@@ -1,0 +1,2 @@
+// error: a function pointer can't be compile time
+@comptime(@fnptr[[@sint()], @sint()])

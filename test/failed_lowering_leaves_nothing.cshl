@@ -1,0 +1,6 @@
+// error: no
+// a function that fails to lower inside @compiles isn't kept: calling it
+// again lowers it again, and fails again
+@bind[f, @fn[[x as @sint()], @sint(), @compileError("no")]];
+@bind[ok, @compiles(f(1 as @sint()))];
+f(2 as @sint()) == (3 as @sint())

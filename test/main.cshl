@@ -1,0 +1,7 @@
+// a file that binds main: the top level runs, then main gets argc and argv,
+// and what it gives is the exit code, as in C. run with no arguments, argc
+// is 1 and argv[0] is the program
+@using @import @path "lib/meta.cshl";
+def main =~ fn [argc as ii, argv as @ptr(@ptr(ic))] ii ~
+  @if[(argc == 1) and (((@at(argv)) as ull) != (0 as ull))
+    and ((@at(argv + 1) as ull) == (0 as ull)), 0 as ii, 1 as ii];

@@ -1,0 +1,21 @@
+// @whendone{...} runs once the top level is done, before main is lowered,
+// in the scope it's written in: here it binds what the top level collected,
+// as a runtime list, for main. what main itself adds comes after
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/slice.cshl";
+@using @import @path "lib/list.cshl";
+def allocators =~ @import @path "lib/allocator.cshl";
+let ct = allocators.comptime_allocator();
+let seen = comptime(list(ull))();
+def note =~ fn [x as any] volatile(comptime(void)) { seen:push(ct, x as ull); };
+// table isn't bound yet: it's looked up when this is lowered, from main
+def count =~ fn [] ull ~ table.len;
+@whendone{
+  let table = seen as list(ull);
+};
+note(10);
+note(20);
+def main =~ fn [] ii {
+  note(30);
+  if (count() == (2 as ull)) and (table:[1] == (20 as ull)) (0 as ii, 1 as ii)
+};

@@ -7,8 +7,13 @@ def i32  = @sint() as type;
 def x =~ 5 as i32;
 def y =~ 6 as i32;
 let z =~ 0 as i32;
-// functions will be like this 
-// def ident  =~ fn [i as any] any i;
+// same as z = (z+1)
+// ~ and | apply pareenthesis
+// a ~ ... -> a(...)
+// a + ~ b + c -> a + (b + c)
+// ... | ... -> (...)...
+// a b | b c -> (ab) bc
+// a + b | - c * d -> (a + b) - c * d
 z =~ x + y;
 
 (z == 11)

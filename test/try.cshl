@@ -1,0 +1,25 @@
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/error.cshl";
+def half =~ fn [n as ii] !ii
+  if (n % (2 as ii)) == (0 as ii) (
+    (!ii).ok(n / (2 as ii)),
+    (!ii).fail error"Odd");
+
+def quarter =~ fn [n as ii] !ii trying {
+  try half ~
+    try half n
+};
+def throws =~ fn [] !ii trying{
+  throw error"Default";
+  0 as ii
+};
+def main =~ fn [] ii {
+  def a = quarter(12 as ii):catch{ 0 as ii };
+  def b = quarter(6 as ii);
+  def c = throws();
+  if (
+    (a == (3 as ii))      and
+    (b.err == error"Odd") and 
+    (c.err == error"Default")
+  ) (0 as ii, 1 as ii)
+};

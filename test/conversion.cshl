@@ -1,0 +1,36 @@
+// as and = use each other: a type that converts itself (Convert) can be
+// assigned to other types, and a type that takes other values (Assign) can
+// be converted to. a type's own assign goes first in a = b
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/ops.cshl";
+// becomes any struct with a deg: Fahrenheit
+def cel = struct{ let deg = 0 as ii; };
+impl(Convert, cel, struct{
+  def conv =~ fn [a as cel, b as type] b {
+    let r = b();
+    r.deg = ((a.deg * 9) / 5) + 32;
+    r
+  };
+});
+// takes an ii
+def taker = struct{ let deg = 0 as ii; };
+impl(Assign, taker, struct{
+  def assign =~ fn [a as @refT(taker), b as any] void {
+    a.deg = b as ii;
+  };
+});
+// does neither
+def plain = struct{ let deg = 0 as ii; };
+
+let c = cel();
+c.deg = 100 as ii;
+def converted = c as plain;
+let assigned = plain();
+assigned = c;
+def taken = 40 as taker;
+let set = taker();
+set = 7 as ii;
+let same = cel();
+same = c;
+(converted.deg == (212 as ii)) and (assigned.deg == (212 as ii))
+  and (taken.deg == (40 as ii)) and (set.deg == (7 as ii)) and (same.deg == (100 as ii))

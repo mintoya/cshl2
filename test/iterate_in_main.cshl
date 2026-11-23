@@ -1,0 +1,10 @@
+// iterating inside a function: an array, filtered, in main
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/iter.cshl";
+def main =~ fn [] ii {
+  let a =~ @arr[4, ii]|();
+  @get[a, 0] = 1 as ii; @get[a, 1] = 2 as ii; @get[a, 2] = 3 as ii; @get[a, 3] = 4 as ii;
+  let t = 0 as ii;
+  for(a) |> filter{ _ > (1 as ii) } |> each{ t = t + _; };
+  t - (9 as ii)
+};

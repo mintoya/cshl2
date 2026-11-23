@@ -1,0 +1,6 @@
+// error: a function pointer only exists at runtime
+// where a function is in the compiled program isn't known while compiling:
+// a struct block runs at compile time, and only null is known then
+@bind[add, @fn[[a as @sint(), b as @sint()], @sint(), a + b]];
+@bind[S, @struct{ @bind[f, add as @fnptr[[@sint(), @sint()], @sint()]] }];
+1 == 1

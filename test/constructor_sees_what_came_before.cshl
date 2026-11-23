@@ -1,0 +1,10 @@
+// a field made by x() is made from what was bound before it in the struct:
+// `let to = to` takes the to from outside, not the field it makes
+@using @import @path "lib/meta.cshl";
+def main =~ fn [] ii {
+  let to = 7 as ii;
+  def S = @struct{ let to = to; };
+  def s = S();
+  to = 8 as ii;
+  @if[(s.to == 7) and (S().to == 8), 0 as ii, 1 as ii]
+};

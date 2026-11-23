@@ -1,0 +1,6 @@
+// error: can't use a runtime value from outside it
+// the top level runs before main, but main is a function of its own: what
+// the top level has at runtime isn't main's (no implicit closures)
+@using @import @path "lib/meta.cshl";
+let n = 5 as ii;
+def main =~ fn [] ii ~ n;

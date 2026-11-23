@@ -1,0 +1,34 @@
+// a union holds one of its fields at a time, in the same bytes; a tagged
+// union knows which, and gives nothing for the others
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/union.cshl";
+def Num = struct{
+  let i = 0 as ii;
+  let b = 0 as uc;
+  let l = 0 as ull;
+  def unused = 5;
+};
+def main =~ fn [] ii {
+  let u = union(Num)();
+  u:set("l", 0x0102030405060708 as ull);
+  def l = u:get("l");
+  u:set("b", 9 as uc);
+  // b is the first byte of l's: the rest stay
+  def changed = u:get("l");
+  def sized = @sizeof(union(Num)) == 8;
+
+  let t = tagged(Num).of("i", 42 as ii);
+  def isi = t:is("i") and (t:is("l") == false);
+  def i = t:get("i");
+  def none = t:get("b");
+  t:set("b", 7 as uc);
+  def b = t:get("b");
+  def ok = (l == (0x0102030405060708 as ull))
+    and (changed == (0x0102030405060709 as ull))
+    and sized and isi
+    and i.present and (i.value == (42 as ii))
+    and (none.present == false)
+    and b.present and (b.value == (7 as uc))
+    and (t:get("i").present == false);
+  if ok (0 as ii, 1 as ii)
+};

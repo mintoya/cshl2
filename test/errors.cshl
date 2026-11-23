@@ -1,0 +1,17 @@
+// an error is a name, numbered: the same name is the same code wherever it's
+// used, a new name gets the next one, and errorName gives the name back,
+// at compile time and at runtime
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/slice.cshl";
+@using @import @path "lib/error.cshl";
+def oom = error"OutOfMemory";
+def eos = error"EndOfStream";
+def main =~ fn [] ii {
+  let eos_name = "EndOfStream";
+  let oom_name = "OutOfMemory";
+  def ok = (oom == error"OutOfMemory") and (oom != eos)
+    and (oom != (0 as code)) and (eos != (0 as code))
+    and same(errorName(eos), slice(uc).of(eos_name))
+    and same(errorName(oom), slice(uc).of(oom_name));
+  if ok (0 as ii, 1 as ii)
+};

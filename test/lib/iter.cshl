@@ -1,0 +1,241 @@
+// iterating, as a trait. an impl of Iterator for a type is its iterator: the
+// impl struct's fields are the iterator's state, and
+//
+//   init(self)  makes an iterator over self
+//   next(it)    the next item as an optional, or nothing at the end; moves
+//               the iterator on
+//
+//   impl(Iterator, R, struct{
+//     let ref = R();
+//     let i = 0 as ull;
+//     def init =~ fn [self as R] @this() { ... };
+//     def next =~ fn [it as @refT(@this())] ?(T) { ... };
+//   });
+//
+// arrays and slices have one already. what's iterated never changes: only
+// its iterator does.
+//
+//   for(xs) |> filter{ _ > limit } |> transform{ _ * k } |> each{ sum = sum + _ };
+//
+// for(x) is init, from x's impl. each{} runs its block for every item of an
+// iterator, as _. filter, transform and until make an iterator over the one
+// piped in. their blocks, like each's, are inlined where they're written:
+// they can use the locals around them. everything here is inline.
+@using @import @path "meta.cshl";
+@using @import @path "traits.cshl";
+@using @import @path "slice.cshl";
+
+def Iterator =~ trait("Iterator",
+  fn [Self as type] type @struct{
+    def init =~ fn [self as @any()] @any() {};
+    def next =~ fn [it as @any()] @any() {};
+  },
+  fn [Self as type] type @struct{});
+
+// the Iterator of an array type, made once for each: a pointer to the array,
+// and an index
+def array_iterator =~ fn [A as type] @comptime(@bool()) {
+  impl(Iterator, A, @struct{
+    let p = @zero(@ptr(A));
+    let i = 0 as ull;
+    def init =~ fn [self as @refT(A)] @this() {
+      let it = @returntype()();
+      it.p = @where(self);
+      it
+    };
+    def next =~ fn [it as @refT(@this())] @volatile(@any())
+      if it.i < @len(@at(it.p)) ({
+        def o = ?(@membertype(A)).from(@get[@at(it.p), it.i]);
+        it.i = it.i + 1;
+        o
+      }, ?(@membertype(A)).null);
+  });
+  1 == 1
+};
+// whether X is a slice(T)
+def is_slice =~ fn [X as type] @comptime(@bool()) ~
+  @if[@compiles(@membertype(@membertype(@typeof(@zero(X).ptr)))),
+    X == slice(@membertype(@membertype(@typeof(@zero(X).ptr)))),
+    (1 != 1)];
+// the Iterator of a slice type, made once for each: the slice, and an index
+def slice_iterator =~ fn [S as type] @comptime(@bool()) {
+  def T = @membertype(@membertype(@typeof(@zero(S).ptr)));
+  impl(Iterator, S, @struct{
+    let s = S();
+    let i = 0 as ull;
+    def init =~ fn [self as S] @this() {
+      let it = @returntype()();
+      it.s = self;
+      it
+    };
+    def next =~ fn [it as @refT(@this())] @volatile(@any())
+      if it.i < it.s.len ({
+        def o = ?(T).from(it.s:get(it.i));
+        it.i = it.i + 1;
+        o
+      }, ?(T).null);
+  });
+  1 == 1
+};
+// arrays' and slices' Iterators, made when one is first iterated
+def builtin_iterators =~ fn [T as type] @comptime(@bool()) {
+  @if[@isarray(T), array_iterator(T), @if[is_slice(T), slice_iterator(T), {}]];
+  1 == 1
+};
+
+// for(x): an iterator over x, from x's Iterator. if x is a place, an
+// array's iterator points at it; otherwise it's over a copy
+def for =~ fn [x as @ast()] @inlineast() '(iter_init(@at@where(`x)));
+// c's iterator, from its init (c a place)
+def iter_init =~ fn [c as anyref] any {
+  builtin_iterators(@typeof(c));
+  method(Iterator, @typeof(c), "init")(c)
+};
+
+// an iterator's next item, or nothing; moves it on
+def step =~ fn [it as anyref] @volatile(@any()) ~ @typeof(it).next(it);
+
+// iterator |> each{ body }: body for every item, as _
+def each =~ fn [body as @ast()] @inlineast() {
+  def it = @gensym(it);
+  def o = @gensym(o);
+  '{
+    @bind[`it, @at@where(_)];
+    @loop {
+      @bind[`o, step(`it)];
+      @if[(`o).present, {
+        @bind[_, (`o).value];
+        `body;
+        @repeat()
+      }, {}];
+    };
+  }
+};
+
+// how many items an iterator has left (it counts with a copy of it)
+def count =~ fn [it as any] any {
+  let n = 0 as ull;
+  @loop {
+    def o = step(it);
+    @if[o.present, { n = n + 1; @repeat() }, {}];
+  };
+  n
+};
+
+// the code for an iterator over the one piped in as _: a struct whose up is
+// a copy of it (and with the fields in the list extra), with next as given
+// (self is the iterator)
+def adapter =~ fn [next as @const(@ast()), extra as @const(@ast())] @ast() {
+  def A = @gensym(A);
+  def m = @gensym(m);
+  '{
+    @bind[`A, @struct{
+      @bind[up, @at@where(@typeof(_)())];
+      ..`extra;
+      @bind[next, @fn[[self as @refT(@this())], @volatile(@any()), `next]];
+    }];
+    @bind[`m, @at@where((`A)())];
+    (`m).up = _;
+    `m
+  }
+};
+
+// iterator |> filter{ keep }: the items keep is true for, as _
+def filter =~ fn [keep as @ast()] @inlineast() {
+  def o = @gensym(o);
+  def r = @gensym(r);
+  adapter('{
+    @bind[`r, @at@where(@zero(@typeof(step(self.up))))];
+    @loop {
+      @bind[`o, step(self.up)];
+      @if[(`o).present, {
+        @bind[_, (`o).value];
+        @if[`keep, `r = `o, @repeat()];
+      }, {}];
+    };
+    `r
+  }, '([]))
+};
+
+// iterator |> transform{ f }: f for each item, as _
+def transform =~ fn [f as @ast()] @inlineast() {
+  def o = @gensym(o);
+  def R = @gensym(R);
+  adapter('{
+    @bind[`o, step(self.up)];
+    // the type f gives: @typeof only looks, it doesn't run f
+    @bind[`R, ?(@typeof({ @bind[_, @zero(@typeof((`o).value))]; `f }))];
+    @if[(`o).present, (`R).from({ @bind[_, (`o).value]; `f }), (`R).null]
+  }, '([]))
+};
+
+// iterator |> until{ stop }: the items before the first one stop is true for
+// (as _); then nothing
+def until =~ fn [stop as @ast()] @inlineast() {
+  def o = @gensym(o);
+  def r = @gensym(r);
+  adapter('{
+    @bind[`r, @at@where(@zero(@typeof(step(self.up))))];
+    @if[self.done, {}, {
+      @bind[`o, step(self.up)];
+      @if[(`o).present, {
+        @bind[_, (`o).value];
+        @if[`stop, self.done = (1 == 1), `r = `o];
+      }, self.done = (1 == 1)];
+    }];
+    `r
+  }, '([@bind[done, @at@where((1 != 1) as @bool())]]))
+};
+
+// from c up to (not including) end
+def rangeT =  ~fn [
+  T as type,
+] type {
+  def Range = struct{
+    let c = @zero(T);
+    let end = @zero(T);
+  };
+  impl(Iterator, Range, struct{
+    let c = @zero(T);
+    let end = @zero(T);
+    def init =~ fn [self as Range] @this() {
+      let it = @returntype()();
+      it.c = self.c;
+      it.end = self.end;
+      it
+    };
+    def next =~ fn [it as @refT(@this())] @volatile(@any())
+      if it.c < it.end ({
+        def o = ?(T).from(it.c);
+        it.c = it.c + 1;
+        o
+      }, ?(T).null);
+  });
+  Range
+};
+def range = ~fn [
+  from as any,
+  to as typeof(from),
+] any {
+  let r =~(rangeT~typeof(from))();
+  r.c = from;
+  r.end = to;
+  r
+};
+
+@struct{
+  def Iterator = Iterator;
+  def impl = impl;
+  def implements = implements;
+  def for = for;
+  def iter_init = iter_init;
+  def step = step;
+  def next = step;
+  def each = each;
+  def count = count;
+  def adapter = adapter;
+  def filter = filter;
+  def transform = transform;
+  def until = until;
+  def range = range;
+}

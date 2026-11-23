@@ -1,0 +1,3 @@
+// error: main runs at runtime
+@using @import @path "lib/meta.cshl";
+def main =~ fn [] @int() 5;

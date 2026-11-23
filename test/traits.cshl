@@ -1,0 +1,52 @@
+// a trait system written in the language: traits with required signatures
+// and default methods, supertraits, impls checked like a compiler checks
+// them, bounds, and static dispatch, all resolved while compiling
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/traits.cshl";
+
+def Eq =~ trait("Eq",
+  fn [Self as type] type @struct{ def eq =~ fn [a as Self, b as Self] bool {}; },
+  fn [Self as type] type @struct{
+    def ne =~ fn [a as Self, b as Self] bool ~ (method(Eq, Self, "eq")(a, b) == false);
+  });
+def Ord =~ trait("Ord",
+  fn [Self as type] type @struct{ def cmp =~ fn [a as Self, b as Self] ii {}; },
+  fn [Self as type] type @struct{
+    def lt =~ fn [a as Self, b as Self] bool ~ (method(Ord, Self, "cmp")(a, b) < 0);
+  });
+extends(Ord, Eq);
+
+def vec2 = @struct{ let x = 0 as ii; let y = 0 as ii; };
+impl(Eq, vec2, @struct{
+  def eq =~ fn [a as vec2, b as vec2] bool ~ (a.x == b.x) and (a.y == b.y);
+});
+impl(Ord, vec2, @struct{
+  def cmp =~ fn [a as vec2, b as vec2] ii ~ ((a.x + a.y) <=> (b.x + b.y)) as ii;
+});
+
+// a generic function with a bound
+def larger =~ fn [a as any, b as @typeof(a)] @typeof(a) {
+  require(@typeof(a), Ord);
+  if method(Ord, @typeof(a), "lt")(a, b) (b, a)
+};
+
+def pt = @struct{ let v = 0 as ii; };
+def other = @struct{ let v = 0 as ii; };
+
+let p = vec2(); p.x = 1;
+let q = vec2(); q.y = 5;
+(method(Eq, vec2, "eq")(p, p))
+  and method(Eq, vec2, "ne")(p, q)          // a default
+  and method(Ord, vec2, "lt")(p, q)         // a default over the impl's cmp
+  and (larger(p, q).y == 5)
+  and implements(vec2, Ord) and (implements(ii, Eq) == false)
+  // the bound: larger needs Ord
+  and (@compiles(larger(1 as ii, 2 as ii)) == false)
+  // coherence: one impl per trait and type
+  and (@compiles(impl(Eq, vec2, @struct{ def eq =~ fn [a as vec2, b as vec2] bool ~ (1 == 1); })) == false)
+  // a missing requirement, a wrong signature, a missing supertrait
+  and (@compiles(impl(Eq, pt, @struct{})) == false)
+  and (@compiles(impl(Eq, pt, @struct{ def eq =~ fn [a as pt] bool ~ (1 == 1); })) == false)
+  and (@compiles(impl(Ord, other, @struct{ def cmp =~ fn [a as other, b as other] ii ~ 0 as ii; })) == false)
+  // and none of those got in
+  and (implements(pt, Eq) == false) and (implements(other, Ord) == false)

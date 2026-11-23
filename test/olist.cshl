@@ -1,0 +1,10 @@
+// compiled only
+// an ordered list at runtime: the C allocator, and a comparator of its own
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/olist.cshl";
+@using @import @path "lib/allocator.cshl";
+def descending =~ fn [a as ii, b as ii] ii ~ b <=> a;
+let xs =~ olist(ii, descending)|();
+let i = 0 as ii;
+loop if i < 50 { xs:add(c_runtime_allocator, (i * 7) % 50); i = i + 1; @repeat(); };
+(xs.items.len == 50) and (xs:get(0) == 49) and (xs:get(49) == 0) and xs:has(21) and (xs:has(50) == false)

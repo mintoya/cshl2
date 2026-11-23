@@ -1,0 +1,10 @@
+// @isstruct: a struct type or a value of one, even with no members; a
+// pointer to one isn't
+@bind[S, @struct{ @bind[a, @at@alloca[@sint()]] }];
+@bind[E, @struct{}];
+@bind[s, @at@alloca[S]];
+@isstruct(S) and @isstruct(E) and @isstruct(s) and @isstruct(E())
+  and (@isstruct(@ptr(S)) == (1 != 1))
+  and (@isstruct(@where(s)) == (1 != 1))
+  and (@isstruct(@arr[2, S]) == (1 != 1))
+  and (@isstruct(@sint()) == (1 != 1))

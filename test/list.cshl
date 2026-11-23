@@ -1,0 +1,17 @@
+// compiled only
+// a list of chars with the C allocator, printed with puts
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/slice.cshl";
+@using @import @path "lib/list.cshl";
+@using @import @path "lib/allocator.cshl";
+let x = list[uc]();
+x:pushArr(
+  c_runtime_allocator,
+  "hello world\0"
+);
+
+@cinclude "stdio.h";
+fn [i as @ptr(any)] void 
+  @cexpr[void, "puts((const char*)a0)"]
+|> _(@where x.mem:get(0));
+x.len == 12

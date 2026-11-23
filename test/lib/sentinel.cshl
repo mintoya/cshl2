@@ -1,0 +1,71 @@
+@using @import @path "slice.cshl";
+@using @import @path "optional.cshl";
+
+@using @import @path "iter.cshl";
+@using @import @path "ops.cshl";
+@using @import @path "meta.cshl";
+def aseq = ~fn [a as ast, b as ast] inline '{
+  `a = _ as typeof(`a) <| `b
+};
+def sentinel =~ fn (
+  Sentinel as comptime(any),
+) type {
+  def T =~ typeof Sentinel;
+  def RT =~ struct{
+    def Sentinel = Sentinel as T;
+    let ptr = (ptr[@arr[0,T]])();
+    def from =~ fn [d as @ptr(any)] @this() {
+      let r = @returntype()();
+      aseq(r.ptr,d);
+      r
+    };
+    def asSlice = ~  fn [self as @this()] slice(T) {
+      let len = 0 as ull;
+      for(self) |> each postinc(len,1);
+      let r = @returntype()();
+      r.len = len;
+      r.ptr = self.ptr;
+      r
+    };
+  };
+  impl(Eq,RT,struct{
+    def eq =~ fn [a as RT, b as RT] bool ~ (a.ptr == b.ptr);
+  });
+  impl(Iterator,RT,struct{
+    let state = RT();
+    def init =~ fn [v as RT] @this() {
+      let res = @returntype()();
+      res.state=v;
+      res
+    };
+    def next =~ fn [state as @refT@this()] ?T {
+      def curr = @get[@at state.state.ptr, 0] as any;
+      if curr != state.state.Sentinel
+        ({
+          aseq(state.state.ptr, @where @get[@at state.state.ptr, 1]);
+            @returntype().from curr
+          },
+          @returntype().null,)
+    };
+  });
+  impl(Assign, RT, struct{
+    def assign =~ fn [a as @refT(RT), b as any] void {
+      a.ptr = b as typeof(a.ptr);
+    };
+  });
+  impl(Convert, RT, struct{
+    def conv =~ fn [a as RT,b as type] b {
+      match b [
+        RT      |> a,
+        any     |> a,
+        @ptr(T) |> a.ptr as @ptr(T),
+        else    |> @compileError("unsupported"),
+      ]
+    };
+  });
+  RT
+};
+
+struct{
+  def sentinel = sentinel;
+}

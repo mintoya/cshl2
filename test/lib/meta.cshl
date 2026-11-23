@@ -2,7 +2,7 @@
 @using @import @path "fn.cshl";
 @struct{
   def loop    = @loop;
-  def thisloop    = @thisloop;
+  def thisloop= @thisloop;
   def defer   = @defer;
   def repeat  = @repeat;
   def struct  = @struct;
@@ -10,11 +10,29 @@
   def false   = (1 != 1);
   def typeof  = @typeof;
   def sizeof  = @sizeof;
+  def ptr       = @ptr;
   def comptime  = @comptime;
+  def volatile  = @volatile;
   def min =~ fn [a as any, b as @typeof(a)] @typeof(a) ~
     if a < b (a,b);
   def max =~ fn [a as any, b as @typeof(a)] @typeof(a) ~
     if a > b (a,b);
+  def postinc =~ fn [a as @ast(), i as @ast()] @inlineast() {
+    def keep = @gensym(keep);
+    '{
+      def `keep = `a as @any();
+      `a = `a + `i;
+      `keep
+    }
+  };
+  def preinc =~ fn [a as @ast(), i as @ast()] @inlineast() {
+    def keep = @gensym(keep);
+    '{
+      def `keep = `a + `i;
+      `a = `keep;
+      `keep
+    }
+  };
   @using @import @path "fn.cshl";
   @using @import @path "if.cshl";
   @using @import @path "match.cshl";

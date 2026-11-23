@@ -1,0 +1,73 @@
+// iterating: an Iterator impl is the iterator (its fields are the state),
+// with init (an iterator over a value) and next (the next item, moving the
+// iterator on); arrays and slices have one. for(x) is init. each{} runs a block
+// per item as _; filter{}, transform{} and until{} make iterables over the
+// one piped in. the blocks are inlined: they use the locals around them, and
+// what's iterated never changes
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/iter.cshl";
+@using @import @path "lib/slice.cshl";
+
+// an array wrapped in a struct: iterable by its data's init and next
+def sarr =~ fn [V as any] any {
+  def T = @typeof(V);
+  def R =~ struct {
+    let data = T();
+    ` ' def `@id("[]") =~ fn [self as @refT@this(), idx as ull] anyref @get[self.data, idx];
+  };
+  // its iterator: a copy of it, and an index
+  impl(Iterator, R, struct{
+    let ref = R();
+    let i = 0 as ull;
+    def init =~ fn [self as R] @this() {
+      let it = @returntype()();
+      it.ref = self;
+      it
+    };
+    def next =~ fn [it as @refT(@this())] any
+      if it.i < @len(it.ref.data) ({
+        def o = ?(@membertype(T)).from(@get[it.ref.data, it.i]);
+        it.i = it.i + 1;
+        o
+      }, ?(@membertype(T)).null);
+  });
+  let result = R();
+  result.data = V;
+  result
+};
+
+let x =~ sarr~{
+  let a =~ @arr[5, ull]|();
+  @get[a, 0] = 5; @get[a, 1] = 4; @get[a, 2] = 3; @get[a, 3] = 2; @get[a, 4] = 1;
+  a
+};
+
+// locals the blocks use
+let k = 3 as ull;
+let limit = 2 as ull;
+
+let sum = 0 as ull;
+for(x) |> each{ sum = sum + _; };
+let big = 0 as ull;
+for(x) |> filter{ _ > limit } |> each{ big = big + _; };
+let scaled = 0 as ull;
+for(x) |> transform{ _ * k } |> filter{ (_ % 2) == 0 } |> each{ scaled = scaled + _; };
+let early = 0 as ii;
+for(range(0 as ii, 10 as ii)) |> until{ _ > 3 } |> each{ early = early + _; };
+let twice = 0 as ull;
+for(x) |> each{ twice = twice + _; };
+for(x) |> each{ twice = twice + _; };
+
+// a slice, and an array directly
+let a3 =~ @arr[3, ull]|();
+@get[a3, 0] = 7; @get[a3, 1] = 8; @get[a3, 2] = 9;
+let s = slice(ull).of(a3);
+let t = 0 as ull;
+for(s) |> each{ t = t + _; };
+let u = 0 as ull;
+for(a3) |> each{ u = u + _; };
+
+(sum == 15) and (big == 12) and (scaled == 18) and (early == 6)
+  // iterating again starts again: nothing was used up
+  and (twice == 30) and (count(for(x)) == 5) and (count(for(x)) == 5)
+  and (t == 24) and (u == 24) and (s.len == 3) and (x:[2] == 3)

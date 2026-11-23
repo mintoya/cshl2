@@ -1,0 +1,123 @@
+// errors, the way zig numbers them: an error is a name, and every name used
+// as an error gets one code, wherever it's used. names is the table: a
+// name's code is its place in it plus 1, given the first time the name is
+// seen (0 is no error). errorName(code) looks the name back up
+@using @import @path "meta.cshl";
+@using @import @path "slice.cshl";
+@using @import @path "list.cshl";
+
+let ct = ~
+  (@import @path "allocator.cshl")
+  .comptime_allocator();
+
+def code = us;
+let names = comptime(list(slice(uc)))();
+
+// whether a and b have the same bytes
+def same =~ fn [a as slice(uc), b as slice(uc)] bool {
+  let eq = a.len == b.len;
+  let i = 0 as ull;
+  loop if eq and (i < a.len) {
+    eq = a:[i] == b:[i];
+    i = i + 1;
+    repeat();
+  };
+  eq
+};
+
+def error =~ fn [name as any] volatile(comptime(code)) {
+  def s = slice(uc).of(name);
+  let found = 0 as comptime(ull);
+  let i = 0 as comptime(ull);
+  loop if (found == 0) and (i < names.len) {
+    if same(names:[i], s) (found = i + 1);
+    i = i + 1;
+    repeat();
+  };
+  if found == 0 {
+    names:push(ct, s);
+    found = names.len;
+  };
+  found as code
+};
+
+@whendone{ let errorNames = names as list(slice(uc)); };
+def errorName =~ fn [c as code] slice(uc) ~ errorNames:[(c as ull) - 1];
+
+// !(T): a T, or an error code instead. err is 0 when there's a value
+def ! =~ fn [T as type] type {
+  def result = @struct{
+    let err   = 0 as code;
+    let value = @zero(T);
+    def ok =~ fn [value as T] @this() {
+      let r = @returntype()();
+      r.value = value;
+      r
+    };
+    def fail =~ fn [e as code] @this() {
+      let r = @returntype()();
+      r.err = e;
+      r
+    };
+    // x:catch{ handler }: x's value, or the handler's, with the code as _
+    def catch =~ fn [self as ast, handler as ast] inline {
+      def temp = @gensym(temp);
+      '{
+        def `temp = `self;
+        `@outlineast(if (`temp).err == (0 as code)
+          ((`temp).value, { def _ = (`temp).err; `handler }))
+      }
+    };
+  };
+  result
+};
+
+def trying =~ fn [body as ast] inline {
+  def failed = @gensym(failed);
+  def result = @gensym(result);
+  def done   = @gensym(done);
+  def loop   = @gensym(loop);
+  '{
+    def try =~ fn [x as ast] inline {
+      def t = @gensym(t);
+      '{
+        def \`t = \`x;
+        @if[(\`t).err != (0 as code), {
+          `failed = (1 == 1);
+          `result = @returntype().fail((\`t).err);
+          @repeat(`loop);
+        }, {}];
+        (\`t).value
+      }
+    };
+    def throw =~ fn [x as ast] inline {
+      def t = @gensym(t);
+      '{
+        `failed = (1 == 1);
+        `result = @returntype().fail(\`x);
+        @repeat(`loop);
+      }
+    };
+    let `result = @returntype()();
+    let `failed = (1 == 0);
+    @loop @if[`failed, {}, {
+      @bind[`loop, @thisloop()];
+      def `done = `body;
+      `result = @if[@typeof(`done) == @returntype(),
+        `done,
+        @returntype().ok(`done)];
+      `failed = (1 == 1);
+    }];
+    `result
+  }
+};
+
+@struct{
+  def code = code;
+  def names = names;
+  def trying = trying;
+  def error = error;
+  def errorName = errorName;
+  def same = same;
+  def ! = !;
+}

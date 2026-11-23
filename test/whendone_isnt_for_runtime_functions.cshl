@@ -1,0 +1,7 @@
+// error: @whendone is for the top level and compile-time code
+// a runtime function's scope is gone by the time the top level is done
+@using @import @path "lib/meta.cshl";
+def main =~ fn [] ii {
+  @whendone{ def x = 1; };
+  0 as ii
+};

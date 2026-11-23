@@ -1,0 +1,4 @@
+// error: main has to be a function
+// a file that binds main is a program: main is what runs
+@using @import @path "lib/meta.cshl";
+def main = 5 as ii;

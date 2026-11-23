@@ -1,0 +1,33 @@
+// a list of compile-time items is compile time: built with the compile-time
+// allocator, which has the runtime one's interface, it's done while compiling
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/slice.cshl";
+@using @import @path "lib/list.cshl";
+@using @import @path "lib/allocator.cshl";
+def cuc =~ comptime uc;
+let ct = comptime_allocator();
+let xs = list(cuc)();
+let ab =~ @arr[2, cuc]|();
+@get[ab, 0] = 97;
+@get[ab, 1] = 98;
+xs:pushArr(ct, ab);
+xs:push(ct, 99 as cuc);
+xs:insert[ct, 0, xs.mem:sub[0, 2]];
+xs:pad(ct, 1);
+
+(xs.len == 6) and
+(xs.mem:get(0) == 97) and
+(xs.mem:get(2) == 97) and 
+(xs.mem:get(4) == 99) and 
+(xs.mem:get(5) == 0)
+  // calls with side effects aren't cached: the same insert twice inserts twice
+  and {
+    def two = xs.mem:sub[0, 2];
+    xs:insert[ct, 0, two];
+    xs:insert[ct, 0, two];
+    xs.len == 10
+  }
+  // get goes to the slice, after the list's memory moved
+  and (xs:get(0) == 97) and (xs:get(9) == 0)
+  // s:[i] calls the member named []: get, for lists and slices
+  and (xs:[0] == 97) and (xs.mem:[9] == 0)

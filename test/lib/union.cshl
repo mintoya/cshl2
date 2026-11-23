@@ -1,0 +1,101 @@
+// unions, from a struct's fields: union(struct{ let i = 0 as ii; let f = ...; })
+// holds one of them at a time, in bytes as big as the biggest. reading and
+// writing them is a byte copy into or out of a value of the field's type,
+// which C always allows: no pointer to the bytes as another type.
+// tagged(...) is a union that knows which field it holds.
+@using @import @path "meta.cshl";
+@using @import @path "slice.cshl";
+@using @import @path "optional.cshl";
+
+// whether S's member n is a field (not a def)
+def isField =~ fn [S as type, n as comptime(any)] comptime(bool) ~
+  @compiles(` '(@offsetof(S, `@id(n))));
+// the type of S's field n
+def fieldType =~ fn [S as type, n as comptime(any)] type ~
+  @typeof(` '((`@id("."))(@zero(S), `@id(n))));
+// the bytes of x, a place
+def bytesOf =~ fn [x as anyref] slice(uc) {
+  let r = slice(uc)();
+  r.ptr = @where(x) as @typeof(r.ptr);
+  r.len = @sizeof(@typeof(x)) as ull;
+  r
+};
+// n's place among S's fields, from 0
+def fieldIndex =~ fn [S as type, n as comptime(any)] comptime(ull) {
+  let found = 0 as comptime(ull);
+  let seen = 0 as comptime(ull);
+  let i = 0;
+  loop if @compiles(@fieldname(S, i)) {
+    def m = @fieldname(S, i);
+    if isField(S, m) {
+      if @ast_stringeq(@id(m), n) (found = seen);
+      seen = seen + 1;
+    };
+    i = i + 1;
+    repeat();
+  };
+  if isField(S, n) == false @compileError("no such field in this union");
+  found
+};
+
+def union =~ fn [F as type] type {
+  let size = 1 as comptime(ull);
+  let i = 0;
+  loop if @compiles(@fieldname(F, i)) {
+    def m = @fieldname(F, i);
+    if isField(F, m) (size = max(size, @sizeof(@fieldtype(F, i)) as comptime(ull)));
+    i = i + 1;
+    repeat();
+  };
+  @struct{
+    def Fields = F;
+    let bytes = @arr[size, uc]();
+    // field n, as what's in the bytes
+    def get =~ fn [self as @this(), n as comptime(any)] fieldType(F, n) {
+      if isField(F, n) == false @compileError("no such field in this union");
+      let r = @returntype()();
+      bytesOf(r):cpy(slice(uc).of(self.bytes));
+      r
+    };
+    // the bytes, as field n holding v
+    def set =~ fn [self as @refT@this(), n as comptime(any), v as any] void {
+      if isField(F, n) == false @compileError("no such field in this union");
+      let t = v as fieldType(F, n);
+      slice(uc).of(self.bytes):cpy(bytesOf(t));
+    };
+  }
+};
+
+def tagged =~ fn [F as type] type {
+  def U = union(F);
+  @struct{
+    def Fields = F;
+    // which field it holds: its place among the fields, from 0
+    let tag = 0 as ull;
+    let data = U();
+    def is =~ fn [self as @this(), n as comptime(any)] bool ~
+      (self.tag == (fieldIndex(F, n) as ull));
+    // field n, if that's what it holds
+    def get =~ fn [self as @this(), n as comptime(any)] ?(fieldType(F, n))
+      if self:is(n) (@returntype().from(self.data:get(n)), @returntype().null);
+    def set =~ fn [self as @refT@this(), n as comptime(any), v as any] void {
+      self.tag = fieldIndex(F, n) as ull;
+      self.data:set(n, v);
+    };
+    // one holding field n, v
+    def of =~ fn [n as comptime(any), v as any] @this() {
+      let r = @returntype()();
+      r:set(n, v);
+      r
+    };
+  }
+};
+
+@struct{
+  def union = union;
+  def tagged = tagged;
+  def fieldType = fieldType;
+  def fieldIndex = fieldIndex;
+  def isField = isField;
+  def bytesOf = bytesOf;
+}

@@ -7,6 +7,8 @@ def slice =~ fn [T as type] type {
     let ptr = @zero(@ptr(@arr[0, T]));
     let len = 0 as ull;
     def get =~ fn [self as Self, i as ull] @refT(T) @get[@at(self.ptr), i];
+    // s:[i] is s:get(i)
+    `'(def `@id("[]") = get);
     def last =~ fn [self as Self] @refT(T) @get[@at(self.ptr), self.len- 1];
     def sub =~ fn [self as Self, start as ull, end as ull] Self {
       let r = Self();
@@ -26,23 +28,24 @@ def slice =~ fn [T as type] type {
       let place = 0 as ull;
       def reverse = (self.ptr as ull) > (b.ptr as ull);
       def max = min(self.len, b.len);
+
       loop if place < max {
-        if reverse (max - 1 - place, place);
+        if reverse (max - 1 - place, place)
           |> self:get[_] = b:get[_];
         place = place + 1;
         @repeat();
       };
     };
-    def asbytes =~ fn [this as any] slice(uc) ~ 
-      @returntype()() |> {
-        _.ptr = (this.ptr as @typeof(_.ptr));
-        _.len = (this.len * (@sizeof(T) as ull));
-        _
-      };
+    def asbytes =~ fn [this as any] slice(uc) {
+      let r = @returntype()();
+      r.ptr = (this.ptr as @typeof(r.ptr));
+      r.len = (this.len * (@sizeof(T) as ull));
+      r
+    };
   };
   S
 };
 
-@struct{
+struct{
   def slice = slice;
 }

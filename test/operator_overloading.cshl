@@ -1,0 +1,45 @@
+// operators are names: using ops.cshl rebinds them here, to functions that
+// use the operand type's impl of the operator's trait, else its own member
+// named after the operator, else what the operator did. it all resolves
+// while compiling
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/ops.cshl";
+
+// its own ==, as a namespace member: the same whole dollars. (not the same
+// bytes, so falling back to the builtin == would give false)
+def money = @struct{
+  def Self = @this();
+  let cents = 0 as ii;
+  `'(def `@id("==") =~ fn [a as Self, b as Self] bool ~
+      ((a.cents / 100) <= (b.cents / 100)) and ((a.cents / 100) >= (b.cents / 100)));
+};
+// ==, <, + through traits
+def vec2 = @struct{ let x = 0 as ii; let y = 0 as ii; };
+impl(Eq, vec2, @struct{
+  def eq =~ fn [a as vec2, b as vec2] bool ~ (a.x == b.x) and (a.y == b.y);
+});
+// by length, roughly: |x| + |y|, with no abs yet: x and y here aren't negative
+impl(Ord, vec2, @struct{
+  def cmp =~ fn [a as vec2, b as vec2] ii ~ ((a.x + a.y) <=> (b.x + b.y)) as ii;
+});
+impl(Add, vec2, @struct{
+  def add =~ fn [a as vec2, b as vec2] vec2 {
+    let r = vec2();
+    r.x = a.x + b.x;
+    r.y = a.y + b.y;
+    r
+  };
+});
+
+let m = money(); m.cents = 150;
+let n = money(); n.cents = 199;
+let a = vec2(); a.x = 1; a.y = 2;
+let b = vec2(); b.x = 1; b.y = 2;
+let c = a + b;
+(m == n) and (a == b) and (a != c) and ((a == c) == false)
+  and (a < c) and (c > a) and (a <= b) and (c >= a) and ((c < a) == false)
+  and (c.x == 2) and (c.y == 4)
+  // anything else is as it was
+  and ((1 + 2) == 3) and (2 < 3)
+  // a type with neither falls back too: vec2 has no Sub, so - is the builtin's
+  and (@compiles(a - b) == false)

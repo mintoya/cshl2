@@ -7,21 +7,66 @@ def list =~ fn [T as type] type {
     def RSelf = @refT@this();
     let mem = slice(T)();
     let len = 0 as ull;
-    def get = ~fn [] @refT(T);
-    def insert = ~fn [
-      self as RSelf,
+    // item i, with no bounds check
+    def get =~ fn [self as Self, i as ull] @refT(T) ~ self.mem:get(i);
+    // s:[i] is s:get(i)
+    `'(def `@id("[]") = get);
+    // arr.len items of arr at idx, the rest moved up; like wheels'
+    // List_insertFromArr: a null arr.ptr inserts zeroes, arr can be part of
+    // this list, and an idx past the end inserts nothing. gives the first
+    // inserted item, or null
+    def deinit =~ fn [
+      self  as RSelf,
       alloc as anyref,
-      idx as ull,
-      arr as slice(T)
     ] void {
-      if (arr.len + self.len) > self.mem.len 
-        self.mem = alloc:resize(self.mem, arr.len + self.len);
-      let back   = self.mem:sub[idx, self.len];
-      def backto = self.mem:sub[idx + arr.len, self.len + arr.len];
-      backto:cpy back;
-      back.len = arr.len;
-      back:cpy arr;
-      self.len = self.len + arr.len;
+      self.mem = alloc:resize(self.mem, 0);
+    };
+    def insert =~ fn [
+      self  as RSelf,
+      alloc as anyref,
+      idx   as ull,
+      arr   as slice(T)
+    ] @volatile(@ptr(T)) ~
+      if idx > self.len (@zero(@ptr(T)), {
+        def size   = @sizeof(T) as ull;
+        def start  = self.mem.ptr as ull;
+        def from   = arr.ptr as ull;
+        def inlist = (from >= start) and (from < start + self.mem.len * size);
+        // room for arr's copy too when it's in here: the resize can move it,
+        // and the move below can write over it
+        def need = self.len + (if inlist (2 * arr.len, arr.len));
+        if need > self.mem.len (self.mem = alloc:resize(self.mem, need));
+        let src = arr;
+        if inlist {
+          def scratch = self.mem:sub[self.mem.len - arr.len, self.mem.len];
+          src.ptr = ((self.mem.ptr as ull) + (from - start)) as @typeof(src.ptr);
+          scratch:cpy src;
+          src = scratch;
+        };
+        def back   = self.mem:sub[idx, self.len];
+        def backto = self.mem:sub[idx + arr.len, self.len + arr.len];
+        backto:cpy back;
+        def dest = self.mem:sub[idx, idx + arr.len];
+        if from == 0 ({
+          let i = 0 as ull;
+          loop if i < dest.len {
+            dest:get[i] = @zero(T);
+            i = i + 1;
+            @repeat();
+          };
+        }, dest:cpy src);
+        self.len = self.len + arr.len;
+        (@where dest:get(0)) as @ptr(T)
+      });
+    // n zeroes at the end
+    def pad =~ fn [
+      self  as RSelf,
+      alloc as anyref,
+      n     as ull
+    ] @volatile(@ptr(T)) {
+      let zeroes = slice(T)();
+      zeroes.len = n;
+      self:insert[alloc, self.len, zeroes]
     };
     def pushSlice =~ fn [
       self as RSelf,
@@ -30,7 +75,7 @@ def list =~ fn [T as type] type {
     ] void self:insert[alloc,self.len,arr];
     def pushArr =~ fn [
       self as RSelf,
-      alloc as any,
+      alloc as anyref,
       item as any
     ] void {
       let tmp = item;
@@ -48,14 +93,6 @@ def list =~ fn [T as type] type {
   }
 };
 
-@using @import @path "allocator.cshl";
-let x = list[uc]();
-x:pushArr(
-  c_runtime_allocator,
-  "hello world\0"
-);
-
-@cinclude "stdio.h";
-fn [i as @ptr(any)] void 
-  @cexpr[void, "puts((const char*)a0)"]
-|> _(@where x.mem:get(0));
+@struct{
+  def list = list;
+}

@@ -1,0 +1,102 @@
+@using @import @path "meta.cshl";
+@using @import @path "traits.cshl";
+
+def Eq =~ trait("Eq",
+  fn [Self as type] type @struct{ def eq =~ fn [a as Self, b as Self] bool {}; },
+  fn [Self as type] type @struct{
+    def ne =~ fn [a as Self, b as Self] bool ~ (method(Eq, Self, "eq")(a, b) == false);
+  });
+def Ord =~ trait("Ord",
+  fn [Self as type] type @struct{ def cmp =~ fn [a as Self, b as Self] ii {}; },
+  fn [Self as type] type @struct{
+    def lt =~ fn [a as Self, b as Self] bool ~ (method(Ord, Self, "cmp")(a, b) < 0);
+    def gt =~ fn [a as Self, b as Self] bool ~ (method(Ord, Self, "cmp")(a, b) > 0);
+    def le =~ fn [a as Self, b as Self] bool ~ (method(Ord, Self, "cmp")(a, b) <= 0);
+    def ge =~ fn [a as Self, b as Self] bool ~ (method(Ord, Self, "cmp")(a, b) >= 0);
+  });
+extends(Ord, Eq);
+def Add =~ trait(
+  "Add",
+  fn [Self as type] type struct{
+    def add =~ fn [a as Self, b as Self] Self {}; },
+  fn [Self as type] type struct{}
+);
+def Sub =~ trait("Sub",
+  fn [Self as type] type @struct{ def sub =~ fn [a as Self, b as Self] Self {}; },
+  fn [Self as type] type @struct{});
+def Mul =~ trait("Mul",
+  fn [Self as type] type @struct{ def mul =~ fn [a as Self, b as Self] Self {}; },
+  fn [Self as type] type @struct{});
+
+// conversion, from either end: Convert is a Self becoming a b (x as b),
+// Assign is a Self taking a b (x = v). as and = each use the other when
+// the type they're about doesn't do it itself
+def Convert =~ trait("Convert",
+  fn [Self as type] type @struct{ def conv =~ fn [a as Self, b as type] b {}; },
+  fn [Self as type] type @struct{});
+def Assign =~ trait("Assign",
+  fn [Self as type] type @struct{ def assign =~ fn [a as @refT(Self), b as any] void {}; },
+  fn [Self as type] type @struct{});
+
+// a as B: a itself if it's a B, else a's conv, else a B that's taken a,
+// else the built-in as
+def convop =~ fn [old as any] any
+  @fn[[a as any, B as type], @any(), {
+    def A = @typeof(a);
+    @if[A == B, a,
+      @if[implements(A, Convert), method(Convert, A, "conv")(a, B),
+        @if[implements(B, Assign), {
+          let r = B();
+          method(Assign, B, "assign")(r, a);
+          r
+        }, old(a, B)]]]
+  }];
+// a = b: a copy if b is already of a's type, else a's assign, else b's
+// conv to a's type, else the built-in =
+def assignop =~ fn [old as any] any
+  @fn[[a as anyref, b as any], @any(), {
+    def A = @typeof(a);
+    def B = @typeof(b);
+    @if[A == B, old(a, b),
+      @if[implements(A, Assign), { method(Assign, A, "assign")(a, b); a },
+        @if[implements(B, Convert), old(a, method(Convert, B, "conv")(b, A)),
+          old(a, b)]]]
+  }];
+
+// the operator `name`, in front of old: tr's method m for the first
+// operand's type, else that type's member named name, else old
+def overload =~ fn [tr as type, m as any, name as any, old as any] any
+  @fn[[a as any, b as any], @any(), {
+    def T = @typeof(a);
+    // T.<name>, written as a call of . since T.`x would unquote only the x
+    def member = '((`@id("."))(T, `@id(name)));
+    @if[implements(T, tr), method(tr, T, m)(a, b),
+      @if[@compiles(`member), (`member)(a, b), old(a, b)]]
+  }];
+
+@struct{
+  def Eq = Eq;
+  def Ord = Ord;
+  def Add = Add;
+  def Sub = Sub;
+  def Mul = Mul;
+  def Convert = Convert;
+  def Assign = Assign;
+  def trait = trait;
+  def impl = impl;
+  def extends = extends;
+  def implements = implements;
+  def require = require;
+  def method = method;
+  `'(def `@id("as") = convop(`@id("as")));
+  `'(def `@id("=")  = assignop(`@id("=")));
+  `'(def `@id("==") = overload(Eq,  "eq",  "==", `@id("==")));
+  `'(def `@id("!=") = overload(Eq,  "ne",  "!=", `@id("!=")));
+  `'(def `@id("<")  = overload(Ord, "lt",  "<",  `@id("<")));
+  `'(def `@id(">")  = overload(Ord, "gt",  ">",  `@id(">")));
+  `'(def `@id("<=") = overload(Ord, "le",  "<=", `@id("<=")));
+  `'(def `@id(">=") = overload(Ord, "ge",  ">=", `@id(">=")));
+  `'(def `@id("+")  = overload(Add, "add", "+",  `@id("+")));
+  `'(def `@id("-")  = overload(Sub, "sub", "-",  `@id("-")));
+  `'(def `@id("*")  = overload(Mul, "mul", "*",  `@id("*")));
+}

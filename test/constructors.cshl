@@ -1,0 +1,10 @@
+// a field bound to a runtime value is made by x(): its initializer runs
+// where x() is called; @using x binds x.name, and x().name for fields
+@using @import @path "lib/meta.cshl";
+let n = 5 as ii;
+def S = @struct{ let m = n; let k = 3 as ii; };
+def a = S();
+n = 6;
+def b = S();
+@using S;
+(a.m == 5) and (b.m == 6) and (a.k == 3) and (m == 6) and (k == 3)

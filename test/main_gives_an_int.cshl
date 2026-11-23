@@ -1,0 +1,4 @@
+// error: main gives an @sint(), the exit code, not a @bool()
+// main's signature is C's: what it gives is the exit code, as it is
+@using @import @path "lib/meta.cshl";
+def main =~ fn [] bool ~ (1 == 1);

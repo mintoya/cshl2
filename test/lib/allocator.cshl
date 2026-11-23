@@ -2,22 +2,22 @@
 @using @import @path "slice.cshl";
 
 def allocator = @struct{
-  def allocatorType = @fnptr[[@refT@this(),@ptr(uc),ull,ull],@ptr(uc)];
+  // (self, the memory it gave before, the size wanted in bytes) -> the memory
+  def allocatorType = @fnptr[[@refT@this(), slice(uc), ull], slice(uc)];
   let func = allocatorType();
   def Self = @this();
   def RSelf = @refT(Self);
 
+  // value: a slice; gives it with room for count items
   def resize =~ fn [
     self  as RSelf,
     value as any,
     count as ull,
-  ] @typeof(value) {
+  ] @volatile(@typeof(value)) {
+    def size = @sizeof(@membertype(@membertype(@typeof(value.ptr)))) as ull;
+    def bytes = self:func(value:asbytes(), count * size);
     let result = value;
-    result.ptr = self:func(
-      result.ptr as @ptr(uc),
-      result.len,
-      count
-    ) as @typeof(result.ptr);
+    result.ptr = bytes.ptr as @typeof(result.ptr);
     result.len = count;
     result
   };
@@ -25,7 +25,7 @@ def allocator = @struct{
     self  as RSelf,
     t     as type,
     count as ull
-  ] slice(t)
+  ] @volatile(slice(t))
     self:resize(@returntype()(),count);
   def free =~ fn [
     self  as RSelf,
@@ -40,24 +40,43 @@ def allocator = @struct{
 @cinclude "stdlib.h";
 
 def discard =~ fn [id as ast] inline '{ def _ = `id; };
-let c_runtime_allocator = { 
-  let tmp = allocator();
-  tmp.func =~ _ as  @typeof(tmp.func) 
-    <|~ fn [
-      _unused as @refT(allocator),
-      mem     as @ptr(uc),
-      from    as ull,
-      to      as ull,
-    ] @ptr(uc) {
-      discard mem; discard from; discard to;
-      @cexpr[@ptr(uc),"realloc(a1,a3)"] 
-    };
-  tmp
+def c_realloc =~ fn [p as @ptr(uc), n as ull] @ptr(uc)
+  @cexpr[@ptr(uc), "realloc(a0, a1)"];
+// compile-time storage from @alloc: the same interface, a resize, with no
+// function pointer (which can't exist at compile time)
+def comptime_allocator = @struct{
+  def resize =~ fn [
+    self  as anyref,
+    value as any,
+    count as ull,
+  ] @volatile(@typeof(value)) {
+    def T = @membertype(@membertype(@typeof(value.ptr)));
+    let result = @returntype()();
+    result.ptr = @alloc[@arr[count, T]] as @typeof(value.ptr);
+    result.len = count;
+    result:cpy value;
+    result
+  };
 };
 
-let exports = (@struct{
-  let c_runtime_allocator = allocator();
-})();
-exports.c_runtime_allocator 
-  = c_runtime_allocator;
-exports
+@struct{
+  def comptime_allocator = comptime_allocator;
+  // runtime export: a function pointer only exists at runtime, so the
+  // allocator is made by the constructor, where (file_yield)() is called
+  let c_runtime_allocator = {
+    let tmp = allocator();
+    tmp.func =~ _ as @typeof(tmp.func)
+      <|~ fn [
+        _unused as @refT(allocator),
+        mem     as slice(uc),
+        to      as ull,
+      ] slice(uc) {
+        discard _unused;
+        let r = mem;
+        r.ptr = c_realloc(mem.ptr as @ptr(uc), to) as @typeof(r.ptr);
+        r.len = to;
+        r
+      };
+    tmp
+  };
+}

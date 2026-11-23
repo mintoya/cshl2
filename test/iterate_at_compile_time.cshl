@@ -1,0 +1,12 @@
+// an iterator's next changes it through a reference, so a compile-time call
+// of it can't be answered from the cache: next and step give @volatile(@any())
+// and run every time. (a cache hit would give the first item forever)
+@using @import @path "lib/meta.cshl";
+@using @import @path "lib/optional.cshl";
+@using @import @path "lib/iter.cshl";
+def total =~ fn [n as int] int {
+  let s = 0;
+  for range(0, n) |> each { s = s + _; };
+  s
+};
+total(4) == 6

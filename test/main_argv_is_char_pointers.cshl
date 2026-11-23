@@ -1,0 +1,4 @@
+// error: main's argv is a pointer to pointers to chars
+// main's signature is C's: argv is a char **
+@using @import @path "lib/meta.cshl";
+def main =~ fn [argc as ii, argv as @ptr(ii)] ii ~ argc;

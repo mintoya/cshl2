@@ -1,0 +1,53 @@
+@using @import @path "meta.cshl";
+@using @import @path "slice.cshl";
+@using @import @path "list.cshl";
+
+// a <=> b, for any items that have one: negative when a goes first, zero
+// when they're equal, positive when b does
+def ascending =~ fn [a as any, b as @typeof(a)] ii ~ (a <=> b) as ii;
+
+// a list kept in order by cmp(a, b), which is like ascending. equal items
+// stay in the order they were added
+def olist =~ fn [T as type, cmp as any] type {
+  // indices are known at compile time when the items are
+  def I =~ if @iscomptime(T) (@comptime(ull), ull);
+  @struct{
+    def Self = @this();
+    def RSelf = @refT@this();
+    let items = list(T)();
+
+    // where v goes: after every item it doesn't go before
+    def place =~ fn [self as Self, v as T] I {
+      let lo = 0 as I;
+      let hi = self.items.len as I;
+      loop if lo < hi {
+        def mid = (lo + hi) / 2;
+        if cmp(v, self.items:get(mid)) < 0 (hi = mid, lo = mid + 1);
+        @repeat();
+      };
+      lo
+    };
+    // v in its place; gives where it went
+    def add =~ fn [
+      self  as RSelf,
+      alloc as anyref,
+      v     as T
+    ] @volatile(@ptr(T)) {
+      let one =~ @arr[1, T]|();
+      @get[one, 0] = v;
+      self.items:insert[alloc, self:place(v), slice(T).of(one)]
+    };
+    // whether an item equal to v is in it
+    def has =~ fn [self as Self, v as T] bool {
+      def i = self:place(v);
+      if i > 0 (cmp(self.items:get(i - 1), v) == 0, false)
+    };
+    // item i, with no bounds check
+    def get =~ fn [self as Self, i as ull] @refT(T) self.items:get(i);
+  }
+};
+
+@struct{
+  def ascending = ascending;
+  def olist = olist;
+}
